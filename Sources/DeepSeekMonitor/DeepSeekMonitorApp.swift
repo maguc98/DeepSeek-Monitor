@@ -210,15 +210,21 @@ struct StatusBanner: View {
 
 // MARK: - Welcome and sign-in
 
+private struct WelcomeFeature: Identifiable {
+    let icon: String
+    let title: String
+    var id: String { title }
+}
+
 struct WelcomeView: View {
     let onContinue: () -> Void
 
-    private let features: [(String, String)] = [
-        ("creditcard", "账户余额与消费"),
-        ("chart.xyaxis.line", "API 用量统计"),
-        ("waveform.path", "Token 使用分析"),
-        ("square.grid.2x2", "模型消耗排行"),
-        ("arrow.triangle.2.circlepath", "与官方平台同步")
+    private let features: [WelcomeFeature] = [
+        WelcomeFeature(icon: "creditcard", title: "账户余额与消费"),
+        WelcomeFeature(icon: "chart.xyaxis.line", title: "API 用量统计"),
+        WelcomeFeature(icon: "waveform.path", title: "Token 使用分析"),
+        WelcomeFeature(icon: "square.grid.2x2", title: "模型消耗排行"),
+        WelcomeFeature(icon: "arrow.triangle.2.circlepath", title: "与官方平台同步")
     ]
 
     var body: some View {
@@ -245,15 +251,15 @@ struct WelcomeView: View {
                     .padding(.top, 7)
 
                 VStack(alignment: .leading, spacing: 17) {
-                    ForEach(features, id: \.1) { icon, title in
+                    ForEach(features) { feature in
                         HStack(spacing: 13) {
-                            Image(systemName: icon)
+                            Image(systemName: feature.icon)
                                 .font(.system(size: 15, weight: .semibold))
                                 .foregroundStyle(DSTheme.blue)
                                 .frame(width: 30, height: 30)
                                 .background(DSTheme.blue.opacity(0.09),
                                             in: RoundedRectangle(cornerRadius: 9))
-                            Text(title)
+                            Text(feature.title)
                                 .font(.system(size: 15, weight: .medium))
                                 .foregroundStyle(DSTheme.ink)
                         }
@@ -318,8 +324,7 @@ struct LoginView: View {
             .foregroundStyle(DSTheme.secondary)
             .padding(.horizontal, 14)
             .frame(height: 38)
-            .background(Color(uiColor: .secondarySystemBackground),
-                        in: RoundedRectangle(cornerRadius: 10))
+            .background(DSTheme.canvas, in: RoundedRectangle(cornerRadius: 10))
             .padding(.horizontal, 15)
             .padding(.bottom, 8)
 
@@ -445,12 +450,12 @@ struct DashboardShellView: View {
 // MARK: - Overview
 
 struct DashboardSnapshot {
-    var accountBalance: Decimal?
-    var todaySpend: Decimal?
-    var totalSpend: Decimal?
-    var todayRequests: Int?
-    var todayTokens: Int?
-    var lastSynchronizedAt: Date?
+    var accountBalance: Decimal? = nil
+    var todaySpend: Decimal? = nil
+    var totalSpend: Decimal? = nil
+    var todayRequests: Int? = nil
+    var todayTokens: Int? = nil
+    var lastSynchronizedAt: Date? = nil
 
     static let unavailable = DashboardSnapshot()
 }
