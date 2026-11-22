@@ -695,6 +695,27 @@ struct OverviewView: View {
                     }
                     .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(DSTheme.secondary)
+
+                    Link(destination: URL(string: "https://platform.deepseek.com/top_up")!) {
+                        HStack(spacing: 7) {
+                            Image(systemName: "plus.circle.fill")
+                                .font(.system(size: 13, weight: .semibold))
+                            Text("立即充值")
+                                .font(.system(size: 13, weight: .semibold))
+                            Spacer()
+                            Text("前往 DeepSeek 官方平台")
+                                .font(.system(size: 10, weight: .medium))
+                                .opacity(0.78)
+                            Image(systemName: "arrow.up.right")
+                                .font(.system(size: 10, weight: .semibold))
+                        }
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 14)
+                        .frame(height: 42)
+                        .background(DSTheme.brandGradient, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("前往 DeepSeek 官方充值页面")
                 }
                 .padding(17)
                 .dsCard(20)
@@ -1538,6 +1559,14 @@ struct SettingsView: View {
                 }
                 .padding(15)
                 .dsCard()
+
+                Link(destination: URL(string: "https://platform.deepseek.com/top_up")!) {
+                    settingsRow("账户充值", detail: "打开 DeepSeek 官方充值页面", icon: "creditcard")
+                }
+                .buttonStyle(.plain)
+                .background(.white, in: RoundedRectangle(cornerRadius: 17, style: .continuous))
+                .dsCard()
+                .accessibilityLabel("前往 DeepSeek 官方充值页面")
 
                 VStack(spacing: 0) {
                     HStack {
