@@ -296,7 +296,9 @@ struct MetricCard: View {
                 Text(title)
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(DSTheme.secondary)
-            }            Text(value)                .font(.system(size: 22, weight: .bold, design: .rounded))
+            }
+            Text(value)
+                .font(.system(size: 22, weight: .bold, design: .rounded))
                 .foregroundStyle(DSTheme.secondary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -812,9 +814,11 @@ struct AnalyticsView: View {
         return visibleDays.min {
             abs($0.date.timeIntervalSince(selectedDate)) < abs($1.date.timeIntervalSince(selectedDate))
         }
-    }    private var selectedHour: PlatformHourlyUsage? {
+    }
+    private var selectedHour: PlatformHourlyUsage? {
         guard selectedRange == .day, let selectedDate else { return nil }
-        return visibleHours.min {            abs($0.date.timeIntervalSince(selectedDate)) < abs($1.date.timeIntervalSince(selectedDate))
+        return visibleHours.min {
+            abs($0.date.timeIntervalSince(selectedDate)) < abs($1.date.timeIntervalSince(selectedDate))
         }
     }
     private var metricAvailable: Bool {
