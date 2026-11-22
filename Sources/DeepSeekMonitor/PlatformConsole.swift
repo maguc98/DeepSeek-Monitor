@@ -202,16 +202,12 @@ final class DeepSeekPlatformSession: ObservableObject {
     }
 
     private func evaluateJavaScript(_ body: String, arguments: [String: Any]) async throws -> Any {
-        try await withCheckedThrowingContinuation { continuation in
-            webView.callAsyncJavaScript(
-                body,
-                arguments: arguments,
-                in: nil,
-                contentWorld: .page
-            ) { result in
-                continuation.resume(with: result)
-            }
-        }
+        try await webView.callAsyncJavaScript(
+            body,
+            arguments: arguments,
+            in: nil,
+            contentWorld: .page
+        )
     }
 
     private func validateBusinessEnvelope(_ response: [String: Any]) throws {
