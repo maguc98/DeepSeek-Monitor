@@ -296,8 +296,7 @@ struct MetricCard: View {
                 Text(title)
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(DSTheme.secondary)
-            }            Text(value)
-                .font(.system(size: 22, weight: .bold, design: .rounded))
+            }            Text(value)                .font(.system(size: 22, weight: .bold, design: .rounded))
                 .foregroundStyle(DSTheme.secondary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -556,8 +555,7 @@ struct DashboardShellView: View {
         default: return nil
         }
     }
-    var body: some View {
-        NavigationStack {
+    var body: some View {        NavigationStack {
             VStack(spacing: 0) {
                 Group {
                     switch selectedTab {
@@ -816,8 +814,7 @@ struct AnalyticsView: View {
         }
     }    private var selectedHour: PlatformHourlyUsage? {
         guard selectedRange == .day, let selectedDate else { return nil }
-        return visibleHours.min {
-            abs($0.date.timeIntervalSince(selectedDate)) < abs($1.date.timeIntervalSince(selectedDate))
+        return visibleHours.min {            abs($0.date.timeIntervalSince(selectedDate)) < abs($1.date.timeIntervalSince(selectedDate))
         }
     }
     private var metricAvailable: Bool {
@@ -1077,7 +1074,6 @@ struct AnalyticsView: View {
         }
         .background(DSTheme.canvas)
     }
-
     private var metricTitle: String {
         switch selectedMetric {
         case .spend: return "消费趋势"
@@ -1252,6 +1248,9 @@ struct ModelsView: View {
                     .padding(15)
                     .dsCard()
 
+                    ModelRequestDistributionPanel(models: modelRows)
+                    ModelTokenComparisonPanel(models: modelRows)
+
                     VStack(alignment: .leading, spacing: 13) {
                         Text("模型消耗排行")
                             .font(.system(size: 16, weight: .bold))
@@ -1336,8 +1335,7 @@ struct RequestRecordRow: View {
                     Text("输出 \(record.outputTokens.map(String.init) ?? "—")")
                 }
                 .font(.system(size: 10))
-                .foregroundStyle(DSTheme.secondary)
-            }
+                .foregroundStyle(DSTheme.secondary)            }
             Spacer()
             VStack(alignment: .trailing, spacing: 5) {
                 Text(record.cost.map { "¥\($0)" } ?? "—")
