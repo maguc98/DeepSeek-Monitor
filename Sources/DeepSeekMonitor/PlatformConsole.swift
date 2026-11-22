@@ -1,6 +1,16 @@
 import Foundation
 import WebKit
 
+struct PlatformDailyModelUsage: Identifiable {
+    let id: String
+    let model: String
+    let cost: Decimal
+    let inputTokens: Int
+    let cacheTokens: Int
+    let outputTokens: Int
+    let requests: Int
+}
+
 struct PlatformDailyUsage: Identifiable {
     let id: String
     let date: Date
@@ -10,10 +20,13 @@ struct PlatformDailyUsage: Identifiable {
     let cacheMissTokens: Int
     let outputTokens: Int
     let requests: Int
+    let models: [PlatformDailyModelUsage]
 
     var totalTokens: Int {
         inputTokens + cacheHitTokens + cacheMissTokens + outputTokens
     }
+
+    var cacheTokens: Int { cacheHitTokens + cacheMissTokens }
 }
 
 struct PlatformModelUsage: Identifiable {
@@ -31,7 +44,7 @@ struct PlatformDashboardData {
     let normalBalance: Decimal?
     let bonusBalance: Decimal?
     let totalSpend: Decimal?
-    let monthSpend: Decimal?
+    let last30DaysSpend: Decimal?
     let todaySpend: Decimal?
     let todayRequests: Int?
     let todayTokens: Int?
@@ -39,6 +52,8 @@ struct PlatformDashboardData {
     let modelUsage: [PlatformModelUsage]
     let synchronizedAt: Date
     let usageAvailable: Bool
+    let tokenUsageAvailable: Bool
+    let costUsageAvailable: Bool
 }
 
 enum PlatformConsoleError: LocalizedError {
@@ -101,7 +116,7 @@ final class DeepSeekPlatformSession: ObservableObject {
         let summary = try await requestJSON(path: "/api/v0/users/get_user_summary")
         try validateBusinessEnvelope(summary)
 
-        let range = currentMonthRange()
+        let range = rolling30DayRange()
         let query = "start=\(range.start)&end=\(range.end)&tz=28800"
         async let amountTask = try? requestJSON(path: "/api/v0/usage/by_api_key/amount?\(query)")
         async let costTask = try? requestJSON(path: "/api/v0/usage/by_api_key/cost?\(query)")
@@ -140,13 +155,13 @@ final class DeepSeekPlatformSession: ObservableObject {
         lastError = nil
     }
 
-    private func currentMonthRange() -> (start: Int, end: Int) {
+    private func rolling30DayRange() -> (start: Int, end: Int) {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = platformTimeZone
-        let components = calendar.dateComponents([.year, .month], from: Date())
-        let startDate = calendar.date(from: components) ?? Date()
-        let nextMonth = calendar.date(byAdding: .month, value: 1, to: startDate) ?? Date()
-        return (Int(startDate.timeIntervalSince1970), Int(nextMonth.timeIntervalSince1970))
+        let today = calendar.startOfDay(for: Date())
+        let startDate = calendar.date(byAdding: .day, value: -29, to: today) ?? today
+        let endDate = calendar.date(byAdding: .day, value: 1, to: today) ?? today
+        return (Int(startDate.timeIntervalSince1970), Int(endDate.timeIntervalSince1970))
     }
 
     private func requestJSON(path: String) async throws -> [String: Any] {
@@ -266,24 +281,41 @@ private enum PlatformDashboardParser {
 
         var days: [String: DayAccumulator] = [:]
         var models: [String: ModelAccumulator] = [:]
+        var dailyModels: [String: [String: ModelAccumulator]] = [:]
         if let amount {
-            parseAmount(amount, timeZone: timeZone, days: &days, models: &models)
+            parseAmount(
+                amount, timeZone: timeZone,
+                days: &days, models: &models, dailyModels: &dailyModels
+            )
         }
         if let cost {
-            parseCost(cost, preferredCurrency: currency, timeZone: timeZone, days: &days, models: &models)
+            parseCost(
+                cost, preferredCurrency: currency, timeZone: timeZone,
+                days: &days, models: &models, dailyModels: &dailyModels
+            )
         }
 
         let calendar = calendarFor(timeZone)
         let todayKey = dateKey(now, calendar: calendar)
-        let monthSpend = days.values.reduce(Decimal.zero) { $0 + $1.cost }
+        let last30DaysSpend = days.values.reduce(Decimal.zero) { $0 + $1.cost }
         let today = days[todayKey]
         let dailyUsage = days.keys.sorted().compactMap { key -> PlatformDailyUsage? in
             guard let value = days[key] else { return nil }
+            let perDayModels = (dailyModels[key] ?? [:]).keys.compactMap { model -> PlatformDailyModelUsage? in
+                guard let modelValue = dailyModels[key]?[model] else { return nil }
+                return PlatformDailyModelUsage(
+                    id: model, model: model, cost: modelValue.cost,
+                    inputTokens: modelValue.inputTokens,
+                    cacheTokens: modelValue.cacheHitTokens + modelValue.cacheMissTokens,
+                    outputTokens: modelValue.outputTokens,
+                    requests: modelValue.requests
+                )
+            }.sorted { $0.cost > $1.cost }
             return PlatformDailyUsage(
                 id: key, date: value.date, cost: value.cost,
                 inputTokens: value.inputTokens, cacheHitTokens: value.cacheHitTokens,
                 cacheMissTokens: value.cacheMissTokens, outputTokens: value.outputTokens,
-                requests: value.requests
+                requests: value.requests, models: perDayModels
             )
         }
         let modelUsage = models.keys.compactMap { model -> PlatformModelUsage? in
@@ -301,7 +333,7 @@ private enum PlatformDashboardParser {
             normalBalance: normalBalance,
             bonusBalance: bonusBalance,
             totalSpend: totalSpend,
-            monthSpend: cost == nil ? nil : monthSpend,
+            last30DaysSpend: cost == nil ? nil : last30DaysSpend,
             todaySpend: cost == nil ? nil : today?.cost,
             todayRequests: amount == nil ? nil : today?.requests,
             todayTokens: amount == nil ? nil : today.map {
@@ -310,7 +342,9 @@ private enum PlatformDashboardParser {
             dailyUsage: dailyUsage,
             modelUsage: modelUsage,
             synchronizedAt: now,
-            usageAvailable: amount != nil || cost != nil
+            usageAvailable: amount != nil || cost != nil,
+            tokenUsageAvailable: amount != nil,
+            costUsageAvailable: cost != nil
         )
     }
 
@@ -347,7 +381,8 @@ private enum PlatformDashboardParser {
         _ response: [String: Any],
         timeZone: TimeZone,
         days: inout [String: DayAccumulator],
-        models: inout [String: ModelAccumulator]
+        models: inout [String: ModelAccumulator],
+        dailyModels: inout [String: [String: ModelAccumulator]]
     ) {
         let biz = businessData(response)
         guard let series = biz["series"] as? [[String: Any]] else { return }
@@ -361,6 +396,7 @@ private enum PlatformDashboardParser {
                 let key = dateKey(date, calendar: calendarFor(timeZone))
                 var day = days[key] ?? DayAccumulator(date: date)
                 var modelValue = models[model] ?? ModelAccumulator()
+                var dailyModelValue = dailyModels[key]?[model] ?? ModelAccumulator()
 
                 let prompt = integer(usage["PROMPT_TOKEN"])
                 let cacheHit = integer(usage["PROMPT_CACHE_HIT_TOKEN"])
@@ -373,10 +409,21 @@ private enum PlatformDashboardParser {
                 day.cacheMissTokens += cacheMiss
                 day.outputTokens += output
                 day.requests += requests
-                modelValue.inputTokens += prompt + cacheHit + cacheMiss
+                modelValue.inputTokens += prompt
+                modelValue.cacheHitTokens += cacheHit
+                modelValue.cacheMissTokens += cacheMiss
                 modelValue.outputTokens += output
                 modelValue.requests += requests
 
+                dailyModelValue.inputTokens += prompt
+                dailyModelValue.cacheHitTokens += cacheHit
+                dailyModelValue.cacheMissTokens += cacheMiss
+                dailyModelValue.outputTokens += output
+                dailyModelValue.requests += requests
+
+                var modelDays = dailyModels[key] ?? [:]
+                modelDays[model] = dailyModelValue
+                dailyModels[key] = modelDays
                 days[key] = day
                 models[model] = modelValue
             }
@@ -388,7 +435,8 @@ private enum PlatformDashboardParser {
         preferredCurrency: String,
         timeZone: TimeZone,
         days: inout [String: DayAccumulator],
-        models: inout [String: ModelAccumulator]
+        models: inout [String: ModelAccumulator],
+        dailyModels: inout [String: [String: ModelAccumulator]]
     ) {
         let biz = businessData(response)
         let groups = biz["data"] as? [[String: Any]] ?? []
@@ -404,8 +452,13 @@ private enum PlatformDashboardParser {
                 let key = dateKey(date, calendar: calendarFor(timeZone))
                 var day = days[key] ?? DayAccumulator(date: date)
                 var modelValue = models[model] ?? ModelAccumulator()
+                var dailyModelValue = dailyModels[key]?[model] ?? ModelAccumulator()
                 day.cost += cost
                 modelValue.cost += cost
+                dailyModelValue.cost += cost
+                var modelDays = dailyModels[key] ?? [:]
+                modelDays[model] = dailyModelValue
+                dailyModels[key] = modelDays
                 days[key] = day
                 models[model] = modelValue
             }
