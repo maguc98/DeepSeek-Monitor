@@ -296,8 +296,7 @@ struct MetricCard: View {
                 Text(title)
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(DSTheme.secondary)
-            }
-            Text(value)
+            }            Text(value)
                 .font(.system(size: 22, weight: .bold, design: .rounded))
                 .foregroundStyle(DSTheme.secondary)
         }
@@ -557,7 +556,6 @@ struct DashboardShellView: View {
         default: return nil
         }
     }
-
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
@@ -816,8 +814,7 @@ struct AnalyticsView: View {
         return visibleDays.min {
             abs($0.date.timeIntervalSince(selectedDate)) < abs($1.date.timeIntervalSince(selectedDate))
         }
-    }
-    private var selectedHour: PlatformHourlyUsage? {
+    }    private var selectedHour: PlatformHourlyUsage? {
         guard selectedRange == .day, let selectedDate else { return nil }
         return visibleHours.min {
             abs($0.date.timeIntervalSince(selectedDate)) < abs($1.date.timeIntervalSince(selectedDate))
@@ -869,6 +866,15 @@ struct AnalyticsView: View {
     private var summaryCache: Int {
         if selectedRange == .day { return visibleHours.reduce(0) { $0 + $1.cacheTokens } }
         return visibleDays.reduce(0) { $0 + $1.cacheTokens }
+    }
+
+    private var summaryCacheHit: Int {
+        if selectedRange == .day { return visibleHours.reduce(0) { $0 + $1.cacheHitTokens } }
+        return visibleDays.reduce(0) { $0 + $1.cacheHitTokens }
+    }
+    private var summaryCacheMiss: Int {
+        if selectedRange == .day { return visibleHours.reduce(0) { $0 + $1.cacheMissTokens } }
+        return visibleDays.reduce(0) { $0 + $1.cacheMissTokens }
     }
     private var summaryRequests: Int {
         if selectedRange == .day { return visibleHours.reduce(0) { $0 + $1.requests } }
@@ -1054,6 +1060,17 @@ struct AnalyticsView: View {
                 }
                 .padding(15)
                 .dsCard()
+
+                TokenCompositionPanel(
+                    inputTokens: summaryInput,
+                    cacheHitTokens: summaryCacheHit,
+                    cacheMissTokens: summaryCacheMiss,
+                    outputTokens: summaryOutput
+                )
+
+                TokenTrendComparisonPanel(days: visibleDays)
+
+                UsageHeatmapPanel(days: Array((data?.dailyUsage ?? []).suffix(30)))
                 .padding(.bottom, 16)
             }
             .padding(.horizontal, 16)
@@ -1076,8 +1093,7 @@ struct AnalyticsView: View {
         case .inputTokens: return formatInteger(point.inputTokens)
         case .outputTokens: return formatInteger(point.outputTokens)
         case .requests: return formatInteger(point.requests)
-        }
-    }
+        }    }
 
     private func displayValue(for point: PlatformHourlyUsage) -> String {
         switch selectedMetric {
@@ -1336,7 +1352,6 @@ struct RequestRecordRow: View {
         .dsCard(15)
     }
 }
-
 struct RecordsView: View {
     @State private var selectedPeriod = "过去 7 天"
     @State private var selectedModel = "全部模型"
