@@ -1056,6 +1056,25 @@ struct AnalyticsView: View {
                             .foregroundStyle(DSTheme.purple)
                             .lineStyle(StrokeStyle(lineWidth: 2.7, lineCap: .round, lineJoin: .round))
                             .interpolationMethod(.monotone)
+                            if let selectedHour {
+                                RuleMark(x: .value("选中时间", selectedHour.date))
+                                    .foregroundStyle(DSTheme.blue.opacity(0.78))
+                                    .lineStyle(StrokeStyle(lineWidth: 1.2, dash: [4, 3]))
+                                    .annotation(position: .top, spacing: 7) {
+                                        VStack(alignment: .leading, spacing: 3) {
+                                            Text(selectedHour.date.formatted(date: .omitted, time: .shortened))
+                                                .font(.system(size: 10, weight: .semibold))
+                                            Text(displayValue(for: selectedHour))
+                                                .font(.system(size: 12, weight: .bold, design: .rounded))
+                                        }
+                                        .foregroundStyle(DSTheme.ink)
+                                        .padding(.horizontal, 9)
+                                        .padding(.vertical, 7)
+                                        .background(.white, in: RoundedRectangle(cornerRadius: 9))
+                                        .overlay(RoundedRectangle(cornerRadius: 9).stroke(DSTheme.line, lineWidth: 0.8))
+                                        .shadow(color: DSTheme.ink.opacity(0.08), radius: 8, y: 3)
+                                    }
+                            }
                         }
                         .chartXSelection(value: $selectedDate)
                         .chartYAxis {
@@ -1097,6 +1116,25 @@ struct AnalyticsView: View {
                             .foregroundStyle(DSTheme.purple)
                             .lineStyle(StrokeStyle(lineWidth: 2.7, lineCap: .round, lineJoin: .round))
                             .interpolationMethod(.monotone)
+                            if let selectedPoint {
+                                RuleMark(x: .value("选中日期", selectedPoint.date))
+                                    .foregroundStyle(DSTheme.blue.opacity(0.78))
+                                    .lineStyle(StrokeStyle(lineWidth: 1.2, dash: [4, 3]))
+                                    .annotation(position: .top, spacing: 7) {
+                                        VStack(alignment: .leading, spacing: 3) {
+                                            Text(selectedPoint.date.formatted(date: .abbreviated, time: .omitted))
+                                                .font(.system(size: 10, weight: .semibold))
+                                            Text(displayValue(for: selectedPoint))
+                                                .font(.system(size: 12, weight: .bold, design: .rounded))
+                                        }
+                                        .foregroundStyle(DSTheme.ink)
+                                        .padding(.horizontal, 9)
+                                        .padding(.vertical, 7)
+                                        .background(.white, in: RoundedRectangle(cornerRadius: 9))
+                                        .overlay(RoundedRectangle(cornerRadius: 9).stroke(DSTheme.line, lineWidth: 0.8))
+                                        .shadow(color: DSTheme.ink.opacity(0.08), radius: 8, y: 3)
+                                    }
+                            }
                         }
                         .chartXSelection(value: $selectedDate)
                         .chartYAxis {
