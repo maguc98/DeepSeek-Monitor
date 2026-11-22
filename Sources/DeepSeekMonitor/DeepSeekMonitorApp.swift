@@ -461,8 +461,24 @@ enum DashboardTab: String, CaseIterable, Identifiable {
 }
 
 struct DashboardShellView: View {
+    @EnvironmentObject private var session: AppSession
+    @Environment(\.scenePhase) private var scenePhase
+    @AppStorage("monitor.syncInterval") private var syncInterval = "每 5 分钟"
     let onSignOut: () -> Void
     @State private var selectedTab: DashboardTab = .overview
+
+    private var autoRefreshTaskID: String {
+        "\(syncInterval)-\(scenePhase == .active ? "active" : "inactive")"
+    }
+
+    private var autoRefreshInterval: Int? {
+        switch syncInterval {
+        case "每 1 分钟": return 60
+        case "每 5 分钟": return 300
+        case "每 15 分钟": return 900
+        default: return nil
+        }
+    }
 
     var body: some View {
         NavigationStack {
@@ -506,6 +522,18 @@ struct DashboardShellView: View {
             }
             .background(DSTheme.canvas.ignoresSafeArea())
             .toolbar(.hidden, for: .navigationBar)
+        }
+        .task(id: autoRefreshTaskID) {
+            guard scenePhase == .active, let interval = autoRefreshInterval else { return }
+            while !Task.isCancelled {
+                do {
+                    try await Task.sleep(nanoseconds: UInt64(interval) * 1_000_000_000)
+                } catch {
+                    break
+                }
+                guard !Task.isCancelled, scenePhase == .active else { break }
+                await session.refreshPlatformData()
+            }
         }
     }
 }
