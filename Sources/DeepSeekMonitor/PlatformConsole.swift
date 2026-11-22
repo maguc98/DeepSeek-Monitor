@@ -1,6 +1,19 @@
 import Foundation
 import WebKit
 
+struct PlatformHourlyUsage: Identifiable {
+    let id: Int
+    let date: Date
+    let cost: Decimal
+    let inputTokens: Int
+    let cacheHitTokens: Int
+    let cacheMissTokens: Int
+    let outputTokens: Int
+    let requests: Int
+
+    var cacheTokens: Int { cacheHitTokens + cacheMissTokens }
+}
+
 struct PlatformDailyModelUsage: Identifiable {
     let id: String
     let model: String
@@ -49,6 +62,7 @@ struct PlatformDashboardData {
     let todayRequests: Int?
     let todayTokens: Int?
     let dailyUsage: [PlatformDailyUsage]
+    let hourlyUsage: [PlatformHourlyUsage]
     let modelUsage: [PlatformModelUsage]
     let synchronizedAt: Date
     let usageAvailable: Bool
@@ -117,15 +131,23 @@ final class DeepSeekPlatformSession: ObservableObject {
         try validateBusinessEnvelope(summary)
 
         let range = rolling30DayRange()
-        let query = "start=\(range.start)&end=\(range.end)&tz=28800"
-        async let amountTask = try? requestJSON(path: "/api/v0/usage/by_api_key/amount?\(query)")
-        async let costTask = try? requestJSON(path: "/api/v0/usage/by_api_key/cost?\(query)")
-        let (amount, cost) = await (amountTask, costTask)
+        let today = singleDayRange()
+        let dailyQuery = "start=\(range.start)&end=\(range.end)&tz=28800"
+        let hourlyQuery = "start=\(today.start)&end=\(today.end)&tz=28800"
+        async let amountTask = try? requestJSON(path: "/api/v0/usage/by_api_key/amount?\(dailyQuery)")
+        async let costTask = try? requestJSON(path: "/api/v0/usage/by_api_key/cost?\(dailyQuery)")
+        async let hourlyAmountTask = try? requestJSON(path: "/api/v0/usage/by_api_key/amount?\(hourlyQuery)")
+        async let hourlyCostTask = try? requestJSON(path: "/api/v0/usage/by_api_key/cost?\(hourlyQuery)")
+        let (amount, cost, hourlyAmount, hourlyCost) = await (
+            amountTask, costTask, hourlyAmountTask, hourlyCostTask
+        )
 
         let data = PlatformDashboardParser.parse(
             summary: summary,
             amount: amount,
             cost: cost,
+            hourlyAmount: hourlyAmount,
+            hourlyCost: hourlyCost,
             now: Date(),
             timeZone: platformTimeZone
         )
@@ -164,6 +186,14 @@ final class DeepSeekPlatformSession: ObservableObject {
         return (Int(startDate.timeIntervalSince1970), Int(endDate.timeIntervalSince1970))
     }
 
+    private func singleDayRange() -> (start: Int, end: Int) {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = platformTimeZone
+        let today = calendar.startOfDay(for: Date())
+        let tomorrow = calendar.date(byAdding: .day, value: 1, to: today) ?? today
+        return (Int(today.timeIntervalSince1970), Int(tomorrow.timeIntervalSince1970))
+    }
+
     private func requestJSON(path: String) async throws -> [String: Any] {
         guard path.hasPrefix("/api/v0/") else {
             throw PlatformConsoleError.invalidResponse
@@ -173,11 +203,22 @@ final class DeepSeekPlatformSession: ObservableObject {
         const candidateKeys = ["userToken", "token", "authToken", "accessToken"];
         let pageToken = null;
         for (const key of candidateKeys) {
-          const value = localStorage.getItem(key);
-          if (typeof value === "string" && value.trim().length > 0) {
-            pageToken = value.trim();
-            break;
+          const raw = localStorage.getItem(key);
+          if (typeof raw !== "string" || raw.trim().length === 0) continue;
+          try {
+            const decoded = JSON.parse(raw);
+            if (typeof decoded === "string" && decoded.trim()) {
+              pageToken = decoded.trim();
+            } else if (decoded && typeof decoded === "object") {
+              const candidate = decoded.value || decoded.token || decoded.accessToken;
+              if (typeof candidate === "string" && candidate.trim()) {
+                pageToken = candidate.trim();
+              }
+            }
+          } catch {
+            pageToken = raw.trim();
           }
+          if (pageToken) break;
         }
         if (!pageToken) {
           return { status: 470, body: "" };
@@ -190,7 +231,8 @@ final class DeepSeekPlatformSession: ObservableObject {
           credentials: "include",
           headers: {
             "Accept": "application/json",
-            "Authorization": authorization
+            "Authorization": authorization,
+            "x-app-version": "1.0.0"
           }
         });
         return { status: response.status, body: await response.text() };
@@ -243,6 +285,16 @@ final class DeepSeekPlatformSession: ObservableObject {
 }
 
 private enum PlatformDashboardParser {
+    private struct HourAccumulator {
+        var date: Date
+        var cost: Decimal = 0
+        var inputTokens = 0
+        var cacheHitTokens = 0
+        var cacheMissTokens = 0
+        var outputTokens = 0
+        var requests = 0
+    }
+
     private struct DayAccumulator {
         var date: Date
         var cost: Decimal = 0
@@ -266,6 +318,8 @@ private enum PlatformDashboardParser {
         summary: [String: Any],
         amount: [String: Any]?,
         cost: [String: Any]?,
+        hourlyAmount: [String: Any]?,
+        hourlyCost: [String: Any]?,
         now: Date,
         timeZone: TimeZone
     ) -> PlatformDashboardData {
@@ -320,6 +374,28 @@ private enum PlatformDashboardParser {
                 requests: value.requests, models: perDayModels
             )
         }
+        var hours: [Int: HourAccumulator] = [:]
+        if let hourlyAmount {
+            parseHourlyAmount(hourlyAmount, timeZone: timeZone, hours: &hours)
+        }
+        if let hourlyCost {
+            parseHourlyCost(
+                hourlyCost, preferredCurrency: currency,
+                timeZone: timeZone, hours: &hours
+            )
+        }
+        let hourlyUsage = hours.keys.sorted().compactMap { key -> PlatformHourlyUsage? in
+            guard let value = hours[key] else { return nil }
+            return PlatformHourlyUsage(
+                id: key, date: value.date, cost: value.cost,
+                inputTokens: value.inputTokens,
+                cacheHitTokens: value.cacheHitTokens,
+                cacheMissTokens: value.cacheMissTokens,
+                outputTokens: value.outputTokens,
+                requests: value.requests
+            )
+        }
+
         let modelUsage = models.keys.compactMap { model -> PlatformModelUsage? in
             guard let value = models[model] else { return nil }
             return PlatformModelUsage(
@@ -343,6 +419,7 @@ private enum PlatformDashboardParser {
                 $0.inputTokens + $0.cacheHitTokens + $0.cacheMissTokens + $0.outputTokens
             },
             dailyUsage: dailyUsage,
+            hourlyUsage: hourlyUsage,
             modelUsage: modelUsage,
             synchronizedAt: now,
             usageAvailable: amount != nil || cost != nil,
@@ -378,6 +455,57 @@ private enum PlatformDashboardParser {
         let selected = rows.filter { ($0["currency"] as? String ?? currency) == currency }
         guard !selected.isEmpty else { return nil }
         return selected.reduce(Decimal.zero) { $0 + (decimal($1["amount"]) ?? 0) }
+    }
+
+    private static func parseHourlyAmount(
+        _ response: [String: Any],
+        timeZone: TimeZone,
+        hours: inout [Int: HourAccumulator]
+    ) {
+        let biz = businessData(response)
+        guard let series = biz["series"] as? [[String: Any]] else { return }
+        for entry in series {
+            guard let buckets = entry["buckets"] as? [[String: Any]] else { continue }
+            for bucket in buckets {
+                guard let timestamp = double(bucket["time"]),
+                      let usage = bucket["usage"] as? [String: Any] else { continue }
+                let key = Int(timestamp)
+                var hour = hours[key] ?? HourAccumulator(
+                    date: Date(timeIntervalSince1970: timestamp)
+                )
+                hour.inputTokens += integer(usage["PROMPT_TOKEN"])
+                hour.cacheHitTokens += integer(usage["PROMPT_CACHE_HIT_TOKEN"])
+                hour.cacheMissTokens += integer(usage["PROMPT_CACHE_MISS_TOKEN"])
+                hour.outputTokens += integer(usage["RESPONSE_TOKEN"])
+                hour.requests += integer(usage["REQUEST"])
+                hours[key] = hour
+            }
+        }
+    }
+
+    private static func parseHourlyCost(
+        _ response: [String: Any],
+        preferredCurrency: String,
+        timeZone: TimeZone,
+        hours: inout [Int: HourAccumulator]
+    ) {
+        let biz = businessData(response)
+        let groups = biz["data"] as? [[String: Any]] ?? []
+        let group = groups.first { ($0["currency"] as? String) == preferredCurrency } ?? groups.first
+        guard let series = group?["series"] as? [[String: Any]] else { return }
+        for entry in series {
+            guard let buckets = entry["buckets"] as? [[String: Any]] else { continue }
+            for bucket in buckets {
+                guard let timestamp = double(bucket["time"]),
+                      let cost = decimal(bucket["cost"]) else { continue }
+                let key = Int(timestamp)
+                var hour = hours[key] ?? HourAccumulator(
+                    date: Date(timeIntervalSince1970: timestamp)
+                )
+                hour.cost += cost
+                hours[key] = hour
+            }
+        }
     }
 
     private static func parseAmount(
