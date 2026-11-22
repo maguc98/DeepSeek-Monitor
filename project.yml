@@ -1,0 +1,27 @@
+name: DeepSeekMonitor
+options:
+  bundleIdPrefix: com.maguc98
+  deploymentTarget:
+    iOS: "17.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: 5.9
+    IPHONEOS_DEPLOYMENT_TARGET: 17.0
+    TARGETED_DEVICE_FAMILY: "1"
+    GENERATE_INFOPLIST_FILE: YES
+    INFOPLIST_KEY_CFBundleDisplayName: DeepSeek Monitor
+    INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
+    INFOPLIST_KEY_UILaunchScreen_Generation: YES
+    CODE_SIGN_STYLE: Automatic
+targets:
+  DeepSeekMonitor:
+    type: application
+    platform: iOS
+    sources:
+      - path: Sources/DeepSeekMonitor
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.maguc98.DeepSeekMonitor
+        PRODUCT_NAME: DeepSeek Monitor
+        SWIFT_VERSION: 5.9
