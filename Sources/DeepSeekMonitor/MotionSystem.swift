@@ -21,7 +21,7 @@ struct DSGlobalButtonStyle: ButtonStyle {
     }
 }
 
-private struct DSEntranceModifier: ViewModifier {
+struct DSEntranceModifier: ViewModifier {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var didAppear = false
     let delay: Double
