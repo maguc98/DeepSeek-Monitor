@@ -690,18 +690,67 @@ struct UsagePoint: Identifiable {
 }
 
 struct AnalyticsView: View {
+    @EnvironmentObject private var session: AppSession
     @State private var selectedRange: UsageRange = .week
     @State private var selectedMetric: UsageMetric = .spend
-    private let points: [UsagePoint] = []
+    @State private var selectedDate: Date?
+
+    private var data: PlatformDashboardData? { session.dashboardData }
+
+    private var visibleDays: [PlatformDailyUsage] {
+        guard let days = data?.dailyUsage else { return [] }
+        switch selectedRange {
+        case .day, .custom:
+            return []
+        case .week:
+            return Array(days.suffix(7))
+        case .month:
+            return Array(days.suffix(30))
+        }
+    }
+
+    private var metricAvailable: Bool {
+        switch selectedMetric {
+        case .spend: return data?.costUsageAvailable == true
+        case .inputTokens, .outputTokens, .requests:
+            return data?.tokenUsageAvailable == true
+        }
+    }
+
+    private var selectedPoint: PlatformDailyUsage? {
+        guard let selectedDate else { return nil }
+        return visibleDays.min {
+            abs($0.date.timeIntervalSince(selectedDate)) < abs($1.date.timeIntervalSince(selectedDate))
+        }
+    }
+
+    private var selectedValue: String {
+        guard let point = selectedPoint else { return "—" }
+        switch selectedMetric {
+        case .spend:
+            return formatMoney(point.cost, currency: data?.currency ?? "CNY")
+        case .inputTokens: return formatInteger(point.inputTokens)
+        case .outputTokens: return formatInteger(point.outputTokens)
+        case .requests: return formatInteger(point.requests)
+        }
+    }
+
+    private var totalInput: Int { visibleDays.reduce(0) { $0 + $1.inputTokens } }
+    private var totalOutput: Int { visibleDays.reduce(0) { $0 + $1.outputTokens } }
+    private var totalCache: Int { visibleDays.reduce(0) { $0 + $1.cacheTokens } }
+    private var totalRequests: Int { visibleDays.reduce(0) { $0 + $1.requests } }
+    private var totalSpend: Decimal { visibleDays.reduce(Decimal.zero) { $0 + $1.cost } }
 
     var body: some View {
         ScrollView(showsIndicators: false) {
             VStack(alignment: .leading, spacing: 16) {
-                PageHeader(title: "用量统计", subtitle: "按时间范围查看平台用量")
+                PageHeader(title: "用量统计", subtitle: "平台日级汇总 · GMT+8")
+
                 HStack(spacing: 5) {
                     ForEach(UsageRange.allCases) { range in
                         Button {
                             selectedRange = range
+                            selectedDate = nil
                         } label: {
                             Text(range.rawValue)
                                 .font(.system(size: 11, weight: .semibold))
@@ -722,6 +771,7 @@ struct AnalyticsView: View {
                         ForEach(UsageMetric.allCases) { metric in
                             Button {
                                 selectedMetric = metric
+                                selectedDate = nil
                             } label: {
                                 Text(metric.rawValue)
                                     .font(.system(size: 12, weight: .semibold))
@@ -741,38 +791,75 @@ struct AnalyticsView: View {
                     }
                 }
 
-                VStack(alignment: .leading, spacing: 10) {
+                VStack(alignment: .leading, spacing: 11) {
                     HStack {
                         Text(metricTitle)
                             .font(.system(size: 15, weight: .bold))
                             .foregroundStyle(DSTheme.ink)
                         Spacer()
-                        Text("暂无数据")
-                            .font(.system(size: 11, weight: .medium))
-                            .foregroundStyle(DSTheme.secondary)
+                        Text(metricAvailable ? selectedValue : "暂无数据")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(DSTheme.purple)
                     }
-                    Chart(points) { point in
-                        LineMark(
-                            x: .value("时间", point.timestamp),
-                            y: .value("数值", point.value)
+
+                    if selectedRange == .day {
+                        EmptyDataPanel(
+                            title: "暂不支持小时级曲线",
+                            message: "已验证的控制台接口返回日级汇总，没有小时级时间桶。这里不会把日数据拆成虚假的小时数据。",
+                            icon: "clock"
                         )
-                        .foregroundStyle(DSTheme.purple)
-                        .interpolationMethod(.catmullRom)
-                    }
-                    .chartYScale(domain: 0...1)
-                    .frame(height: 205)
-                    .overlay {
-                        VStack(spacing: 7) {
-                            Image(systemName: "chart.xyaxis.line")
-                                .font(.system(size: 23, weight: .light))
-                            Text("等待真实用量数据")
-                                .font(.system(size: 12, weight: .medium))
+                    } else if selectedRange == .custom {
+                        EmptyDataPanel(
+                            title: "自定义范围尚未开放",
+                            message: "当前先支持最近 7 天和最近 30 天。"
+                        )
+                    } else if !metricAvailable {
+                        EmptyDataPanel(
+                            title: "该指标暂不可用",
+                            message: "本次同步没有成功取得这一类统计数据，请稍后刷新。",
+                            icon: "chart.xyaxis.line"
+                        )
+                    } else if visibleDays.isEmpty {
+                        EmptyDataPanel(
+                            title: "暂无趋势数据",
+                            message: "平台目前没有返回所选时间范围内的日统计记录。"
+                        )
+                    } else {
+                        Chart(visibleDays) { point in
+                            AreaMark(
+                                x: .value("日期", point.date),
+                                y: .value("数值", chartValue(point))
+                            )
+                            .foregroundStyle(DSTheme.purple.opacity(0.12))
+                            LineMark(
+                                x: .value("日期", point.date),
+                                y: .value("数值", chartValue(point))
+                            )
+                            .foregroundStyle(DSTheme.purple)
+                            .interpolationMethod(.catmullRom)
+                            PointMark(
+                                x: .value("日期", point.date),
+                                y: .value("数值", chartValue(point))
+                            )
+                            .foregroundStyle(DSTheme.purple)
                         }
-                        .foregroundStyle(DSTheme.secondary)
+                        .chartXSelection(value: $selectedDate)
+                        .frame(height: 205)
+                        if let selectedPoint {
+                            HStack {
+                                Text(selectedPoint.date.formatted(date: .abbreviated, time: .omitted))
+                                Spacer()
+                                Text(selectedValue)
+                                    .fontWeight(.semibold)
+                            }
+                            .font(.system(size: 11))
+                            .foregroundStyle(DSTheme.secondary)
+                        } else {
+                            Text("点击图表中的日期查看准确数值")
+                                .font(.system(size: 11))
+                                .foregroundStyle(DSTheme.secondary)
+                        }
                     }
-                    Text("接入数据源后，支持点击折线节点查看该时间点的准确数值。")
-                        .font(.system(size: 11))
-                        .foregroundStyle(DSTheme.secondary)
                 }
                 .padding(15)
                 .dsCard()
@@ -781,13 +868,21 @@ struct AnalyticsView: View {
                     Text("用量总览（\(selectedRange.rawValue)）")
                         .font(.system(size: 15, weight: .bold))
                         .foregroundStyle(DSTheme.ink)
-                    summaryRow("输入 Token", icon: "arrow.down.circle")
+                    summaryRow("消费", value: data?.costUsageAvailable == true
+                               ? formatMoney(totalSpend, currency: data?.currency ?? "CNY") : "—",
+                               icon: "yensign.circle")
                     Divider().overlay(DSTheme.line)
-                    summaryRow("输出 Token", icon: "arrow.up.circle")
+                    summaryRow("输入 Token", value: data?.tokenUsageAvailable == true
+                               ? formatInteger(totalInput) : "—", icon: "arrow.down.circle")
                     Divider().overlay(DSTheme.line)
-                    summaryRow("缓存 Token", icon: "tray")
+                    summaryRow("输出 Token", value: data?.tokenUsageAvailable == true
+                               ? formatInteger(totalOutput) : "—", icon: "arrow.up.circle")
                     Divider().overlay(DSTheme.line)
-                    summaryRow("API 请求", icon: "arrow.left.arrow.right")
+                    summaryRow("缓存 Token", value: data?.tokenUsageAvailable == true
+                               ? formatInteger(totalCache) : "—", icon: "tray")
+                    Divider().overlay(DSTheme.line)
+                    summaryRow("API 请求", value: data?.tokenUsageAvailable == true
+                               ? formatInteger(totalRequests) : "—", icon: "arrow.left.arrow.right")
                 }
                 .padding(15)
                 .dsCard()
@@ -807,12 +902,21 @@ struct AnalyticsView: View {
         }
     }
 
-    private func summaryRow(_ title: String, icon: String) -> some View {
+    private func chartValue(_ point: PlatformDailyUsage) -> Double {
+        switch selectedMetric {
+        case .spend: return NSDecimalNumber(decimal: point.cost).doubleValue
+        case .inputTokens: return Double(point.inputTokens)
+        case .outputTokens: return Double(point.outputTokens)
+        case .requests: return Double(point.requests)
+        }
+    }
+
+    private func summaryRow(_ title: String, value: String, icon: String) -> some View {
         HStack(spacing: 10) {
             Image(systemName: icon).foregroundStyle(DSTheme.blue).frame(width: 20)
             Text(title).font(.system(size: 13)).foregroundStyle(DSTheme.ink)
             Spacer()
-            Text("—")
+            Text(value)
                 .font(.system(size: 13, weight: .semibold, design: .rounded))
                 .foregroundStyle(DSTheme.secondary)
         }
@@ -822,15 +926,54 @@ struct AnalyticsView: View {
 // MARK: - Model analytics
 
 struct ModelsView: View {
+    @EnvironmentObject private var session: AppSession
     @State private var selectedRange = "7 天"
-    private let ranges = ["7 天", "30 天", "12 个月"]
+
+    private var data: PlatformDashboardData? { session.dashboardData }
+
+    private var selectedDays: [PlatformDailyUsage] {
+        guard let days = data?.dailyUsage, selectedRange != "12 个月" else { return [] }
+        return Array(days.suffix(selectedRange == "7 天" ? 7 : 30))
+    }
+
+    private var modelRows: [PlatformDailyModelUsage] {
+        var result: [String: PlatformDailyModelUsage] = [:]
+        for day in selectedDays {
+            for item in day.models {
+                let previous = result[item.model]
+                result[item.model] = PlatformDailyModelUsage(
+                    id: item.model,
+                    model: item.model,
+                    cost: (previous?.cost ?? 0) + item.cost,
+                    inputTokens: (previous?.inputTokens ?? 0) + item.inputTokens,
+                    cacheTokens: (previous?.cacheTokens ?? 0) + item.cacheTokens,
+                    outputTokens: (previous?.outputTokens ?? 0) + item.outputTokens,
+                    requests: (previous?.requests ?? 0) + item.requests
+                )
+            }
+        }
+        return result.values.sorted { $0.cost > $1.cost }
+    }
+
+    private var totalModelCost: Decimal {
+        modelRows.reduce(Decimal.zero) { $0 + $1.cost }
+    }
+
+    private var hasCostBreakdown: Bool {
+        data?.costUsageAvailable == true && modelRows.contains { $0.cost > 0 }
+    }
+
+    private var hasTokenBreakdown: Bool {
+        data?.tokenUsageAvailable == true && !modelRows.isEmpty
+    }
 
     var body: some View {
         ScrollView(showsIndicators: false) {
             VStack(spacing: 15) {
                 PageHeader(title: "模型统计", subtitle: "按模型查看消费与 Token 分布")
+
                 HStack(spacing: 5) {
-                    ForEach(ranges, id: \.self) { range in
+                    ForEach(["7 天", "30 天", "12 个月"], id: \.self) { range in
                         Button {
                             selectedRange = range
                         } label: {
@@ -850,35 +993,99 @@ struct ModelsView: View {
                 .padding(5)
                 .background(.white, in: Capsule())
 
-                EmptyDataPanel(
-                    title: "暂无模型统计",
-                    message: "成功读取平台用量记录后，会在这里展示各模型的消费占比与排行。",
-                    icon: "chart.pie"
-                )
-
-                VStack(alignment: .leading, spacing: 13) {
-                    Text("模型消耗排行")
-                        .font(.system(size: 16, weight: .bold))
-                        .foregroundStyle(DSTheme.ink)
-                    HStack {
-                        Text("模型")
-                        Spacer()
-                        Text("消费 / Token")
+                if selectedRange == "12 个月" {
+                    EmptyDataPanel(
+                        title: "暂无 12 个月历史",
+                        message: "当前适配器只请求最近 30 天的控制台日级数据。不会用 30 天数据填充全年图表。",
+                        icon: "calendar"
+                    )
+                } else if !hasCostBreakdown && !hasTokenBreakdown {
+                    EmptyDataPanel(
+                        title: "暂无模型统计",
+                        message: "成功读取平台按模型统计的用量后，这里会显示模型消费占比与 Token 排行。",
+                        icon: "chart.pie"
+                    )
+                } else {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("模型消费占比")
+                            .font(.system(size: 15, weight: .bold))
+                            .foregroundStyle(DSTheme.ink)
+                        if hasCostBreakdown {
+                            Chart(modelRows.filter { $0.cost > 0 }) { model in
+                                SectorMark(
+                                    angle: .value("消费", NSDecimalNumber(decimal: model.cost).doubleValue),
+                                    innerRadius: .ratio(0.58),
+                                    angularInset: 2
+                                )
+                                .foregroundStyle(by: .value("模型", model.model))
+                            }
+                            .frame(height: 205)
+                            .chartLegend(position: .bottom, alignment: .leading)
+                            HStack {
+                                Text("合计")
+                                    .font(.system(size: 12, weight: .medium))
+                                    .foregroundStyle(DSTheme.secondary)
+                                Spacer()
+                                Text(formatMoney(totalModelCost, currency: data?.currency ?? "CNY"))
+                                    .font(.system(size: 21, weight: .bold, design: .rounded))
+                                    .foregroundStyle(DSTheme.ink)
+                            }
+                        } else {
+                            EmptyDataPanel(
+                                title: "费用数据暂不可用",
+                                message: "当前可以展示 Token 与请求量，但没有取得模型费用桶。",
+                                icon: "yensign.circle"
+                            )
+                        }
                     }
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(DSTheme.secondary)
-                    Divider().overlay(DSTheme.line)
-                    Text("连接数据源后显示模型明细")
-                        .font(.system(size: 12))
-                        .foregroundStyle(DSTheme.secondary)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 19)
+                    .padding(15)
+                    .dsCard()
+
+                    VStack(alignment: .leading, spacing: 13) {
+                        Text("模型消耗排行")
+                            .font(.system(size: 16, weight: .bold))
+                            .foregroundStyle(DSTheme.ink)
+                        ForEach(modelRows) { model in
+                            HStack(spacing: 10) {
+                                RoundedRectangle(cornerRadius: 9)
+                                    .fill(DSTheme.blue.opacity(0.10))
+                                    .frame(width: 32, height: 32)
+                                    .overlay {
+                                        Image(systemName: "cpu")
+                                            .font(.system(size: 14, weight: .semibold))
+                                            .foregroundStyle(DSTheme.blue)
+                                    }
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(model.model)
+                                        .font(.system(size: 13, weight: .semibold))
+                                        .foregroundStyle(DSTheme.ink)
+                                    Text("输入 \(formatInteger(model.inputTokens)) · 输出 \(formatInteger(model.outputTokens))")
+                                        .font(.system(size: 10))
+                                        .foregroundStyle(DSTheme.secondary)
+                                }
+                                Spacer()
+                                VStack(alignment: .trailing, spacing: 4) {
+                                    Text(data?.costUsageAvailable == true
+                                         ? formatMoney(model.cost, currency: data?.currency ?? "CNY") : "—")
+                                        .font(.system(size: 12, weight: .bold, design: .rounded))
+                                        .foregroundStyle(DSTheme.ink)
+                                    Text("请求 \(formatInteger(model.requests))")
+                                        .font(.system(size: 10))
+                                        .foregroundStyle(DSTheme.secondary)
+                                }
+                            }
+                            .padding(.vertical, 5)
+                            if model.id != modelRows.last?.id {
+                                Divider().overlay(DSTheme.line)
+                            }
+                        }
+                    }
+                    .padding(15)
+                    .dsCard()
                 }
-                .padding(15)
-                .dsCard()
-                .padding(.bottom, 16)
             }
             .padding(.horizontal, 16)
+            .padding(.bottom, 16)
         }
         .background(DSTheme.canvas)
     }

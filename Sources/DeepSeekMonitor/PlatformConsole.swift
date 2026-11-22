@@ -256,6 +256,8 @@ private enum PlatformDashboardParser {
     private struct ModelAccumulator {
         var cost: Decimal = 0
         var inputTokens = 0
+        var cacheHitTokens = 0
+        var cacheMissTokens = 0
         var outputTokens = 0
         var requests = 0
     }
@@ -322,7 +324,8 @@ private enum PlatformDashboardParser {
             guard let value = models[model] else { return nil }
             return PlatformModelUsage(
                 id: model, model: model, cost: value.cost,
-                inputTokens: value.inputTokens, outputTokens: value.outputTokens,
+                inputTokens: value.inputTokens,
+                outputTokens: value.outputTokens,
                 requests: value.requests
             )
         }.sorted { $0.cost > $1.cost }
