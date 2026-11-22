@@ -696,19 +696,27 @@ struct AnalyticsView: View {
     @State private var selectedDate: Date?
 
     private var data: PlatformDashboardData? { session.dashboardData }
-
     private var visibleDays: [PlatformDailyUsage] {
         guard let days = data?.dailyUsage else { return [] }
         switch selectedRange {
-        case .day, .custom:
-            return []
-        case .week:
-            return Array(days.suffix(7))
-        case .month:
-            return Array(days.suffix(30))
+        case .day, .custom: return []
+        case .week: return Array(days.suffix(7))
+        case .month: return Array(days.suffix(30))
         }
     }
-
+    private var visibleHours: [PlatformHourlyUsage] { data?.hourlyUsage ?? [] }
+    private var selectedPoint: PlatformDailyUsage? {
+        guard selectedRange != .day, let selectedDate else { return nil }
+        return visibleDays.min {
+            abs($0.date.timeIntervalSince(selectedDate)) < abs($1.date.timeIntervalSince(selectedDate))
+        }
+    }
+    private var selectedHour: PlatformHourlyUsage? {
+        guard selectedRange == .day, let selectedDate else { return nil }
+        return visibleHours.min {
+            abs($0.date.timeIntervalSince(selectedDate)) < abs($1.date.timeIntervalSince(selectedDate))
+        }
+    }
     private var metricAvailable: Bool {
         switch selectedMetric {
         case .spend: return data?.costUsageAvailable == true
@@ -716,36 +724,37 @@ struct AnalyticsView: View {
             return data?.tokenUsageAvailable == true
         }
     }
-
-    private var selectedPoint: PlatformDailyUsage? {
-        guard let selectedDate else { return nil }
-        return visibleDays.min {
-            abs($0.date.timeIntervalSince(selectedDate)) < abs($1.date.timeIntervalSince(selectedDate))
-        }
-    }
-
     private var selectedValue: String {
-        guard let point = selectedPoint else { return "—" }
-        switch selectedMetric {
-        case .spend:
-            return formatMoney(point.cost, currency: data?.currency ?? "CNY")
-        case .inputTokens: return formatInteger(point.inputTokens)
-        case .outputTokens: return formatInteger(point.outputTokens)
-        case .requests: return formatInteger(point.requests)
-        }
+        if selectedRange == .day, let selectedHour { return displayValue(for: selectedHour) }
+        if let selectedPoint { return displayValue(for: selectedPoint) }
+        return "—"
     }
 
-    private var totalInput: Int { visibleDays.reduce(0) { $0 + $1.inputTokens } }
-    private var totalOutput: Int { visibleDays.reduce(0) { $0 + $1.outputTokens } }
-    private var totalCache: Int { visibleDays.reduce(0) { $0 + $1.cacheTokens } }
-    private var totalRequests: Int { visibleDays.reduce(0) { $0 + $1.requests } }
-    private var totalSpend: Decimal { visibleDays.reduce(Decimal.zero) { $0 + $1.cost } }
+    private var summaryInput: Int {
+        if selectedRange == .day { return visibleHours.reduce(0) { $0 + $1.inputTokens } }
+        return visibleDays.reduce(0) { $0 + $1.inputTokens }
+    }
+    private var summaryOutput: Int {
+        if selectedRange == .day { return visibleHours.reduce(0) { $0 + $1.outputTokens } }
+        return visibleDays.reduce(0) { $0 + $1.outputTokens }
+    }
+    private var summaryCache: Int {
+        if selectedRange == .day { return visibleHours.reduce(0) { $0 + $1.cacheTokens } }
+        return visibleDays.reduce(0) { $0 + $1.cacheTokens }
+    }
+    private var summaryRequests: Int {
+        if selectedRange == .day { return visibleHours.reduce(0) { $0 + $1.requests } }
+        return visibleDays.reduce(0) { $0 + $1.requests }
+    }
+    private var summarySpend: Decimal {
+        if selectedRange == .day { return visibleHours.reduce(Decimal.zero) { $0 + $1.cost } }
+        return visibleDays.reduce(Decimal.zero) { $0 + $1.cost }
+    }
 
     var body: some View {
         ScrollView(showsIndicators: false) {
             VStack(alignment: .leading, spacing: 16) {
-                PageHeader(title: "用量统计", subtitle: "平台日级汇总 · GMT+8")
-
+                PageHeader(title: "用量统计", subtitle: "平台统计 · GMT+8")
                 HStack(spacing: 5) {
                     ForEach(UsageRange.allCases) { range in
                         Button {
@@ -802,16 +811,10 @@ struct AnalyticsView: View {
                             .foregroundStyle(DSTheme.purple)
                     }
 
-                    if selectedRange == .day {
-                        EmptyDataPanel(
-                            title: "暂不支持小时级曲线",
-                            message: "已验证的控制台接口返回日级汇总，没有小时级时间桶。这里不会把日数据拆成虚假的小时数据。",
-                            icon: "clock"
-                        )
-                    } else if selectedRange == .custom {
+                    if selectedRange == .custom {
                         EmptyDataPanel(
                             title: "自定义范围尚未开放",
-                            message: "当前先支持最近 7 天和最近 30 天。"
+                            message: "目前支持 24 小时、最近 7 天和最近 30 天。"
                         )
                     } else if !metricAvailable {
                         EmptyDataPanel(
@@ -819,11 +822,45 @@ struct AnalyticsView: View {
                             message: "本次同步没有成功取得这一类统计数据，请稍后刷新。",
                             icon: "chart.xyaxis.line"
                         )
-                    } else if visibleDays.isEmpty {
+                    } else if selectedRange == .day && visibleHours.isEmpty {
+                        EmptyDataPanel(
+                            title: "暂无小时级数据",
+                            message: "今天的单日统计接口尚未返回小时桶。可以刷新后重试。",
+                            icon: "clock"
+                        )
+                    } else if selectedRange != .day && visibleDays.isEmpty {
                         EmptyDataPanel(
                             title: "暂无趋势数据",
                             message: "平台目前没有返回所选时间范围内的日统计记录。"
                         )
+                    } else if selectedRange == .day {
+                        Chart(visibleHours) { point in
+                            AreaMark(
+                                x: .value("小时", point.date),
+                                y: .value("数值", chartValue(point))
+                            )
+                            .foregroundStyle(DSTheme.purple.opacity(0.12))
+                            LineMark(
+                                x: .value("小时", point.date),
+                                y: .value("数值", chartValue(point))
+                            )
+                            .foregroundStyle(DSTheme.purple)
+                            .interpolationMethod(.catmullRom)
+                            PointMark(
+                                x: .value("小时", point.date),
+                                y: .value("数值", chartValue(point))
+                            )
+                            .foregroundStyle(DSTheme.purple)
+                        }
+                        .chartXSelection(value: $selectedDate)
+                        .frame(height: 205)
+                        HStack {
+                            Text(selectedHour?.date.formatted(date: .omitted, time: .shortened) ?? "今天")
+                            Spacer()
+                            Text("单日接口 · 小时桶")
+                        }
+                        .font(.system(size: 11))
+                        .foregroundStyle(DSTheme.secondary)
                     } else {
                         Chart(visibleDays) { point in
                             AreaMark(
@@ -845,20 +882,13 @@ struct AnalyticsView: View {
                         }
                         .chartXSelection(value: $selectedDate)
                         .frame(height: 205)
-                        if let selectedPoint {
-                            HStack {
-                                Text(selectedPoint.date.formatted(date: .abbreviated, time: .omitted))
-                                Spacer()
-                                Text(selectedValue)
-                                    .fontWeight(.semibold)
-                            }
-                            .font(.system(size: 11))
-                            .foregroundStyle(DSTheme.secondary)
-                        } else {
-                            Text("点击图表中的日期查看准确数值")
-                                .font(.system(size: 11))
-                                .foregroundStyle(DSTheme.secondary)
+                        HStack {
+                            Text(selectedPoint?.date.formatted(date: .abbreviated, time: .omitted) ?? "最近 \(selectedRange.rawValue)")
+                            Spacer()
+                            Text("点击图表查看数值")
                         }
+                        .font(.system(size: 11))
+                        .foregroundStyle(DSTheme.secondary)
                     }
                 }
                 .padding(15)
@@ -869,20 +899,20 @@ struct AnalyticsView: View {
                         .font(.system(size: 15, weight: .bold))
                         .foregroundStyle(DSTheme.ink)
                     summaryRow("消费", value: data?.costUsageAvailable == true
-                               ? formatMoney(totalSpend, currency: data?.currency ?? "CNY") : "—",
+                               ? formatMoney(summarySpend, currency: data?.currency ?? "CNY") : "—",
                                icon: "yensign.circle")
                     Divider().overlay(DSTheme.line)
                     summaryRow("输入 Token", value: data?.tokenUsageAvailable == true
-                               ? formatInteger(totalInput) : "—", icon: "arrow.down.circle")
+                               ? formatInteger(summaryInput) : "—", icon: "arrow.down.circle")
                     Divider().overlay(DSTheme.line)
                     summaryRow("输出 Token", value: data?.tokenUsageAvailable == true
-                               ? formatInteger(totalOutput) : "—", icon: "arrow.up.circle")
+                               ? formatInteger(summaryOutput) : "—", icon: "arrow.up.circle")
                     Divider().overlay(DSTheme.line)
                     summaryRow("缓存 Token", value: data?.tokenUsageAvailable == true
-                               ? formatInteger(totalCache) : "—", icon: "tray")
+                               ? formatInteger(summaryCache) : "—", icon: "tray")
                     Divider().overlay(DSTheme.line)
                     summaryRow("API 请求", value: data?.tokenUsageAvailable == true
-                               ? formatInteger(totalRequests) : "—", icon: "arrow.left.arrow.right")
+                               ? formatInteger(summaryRequests) : "—", icon: "arrow.left.arrow.right")
                 }
                 .padding(15)
                 .dsCard()
@@ -902,7 +932,34 @@ struct AnalyticsView: View {
         }
     }
 
+    private func displayValue(for point: PlatformDailyUsage) -> String {
+        switch selectedMetric {
+        case .spend: return formatMoney(point.cost, currency: data?.currency ?? "CNY")
+        case .inputTokens: return formatInteger(point.inputTokens)
+        case .outputTokens: return formatInteger(point.outputTokens)
+        case .requests: return formatInteger(point.requests)
+        }
+    }
+
+    private func displayValue(for point: PlatformHourlyUsage) -> String {
+        switch selectedMetric {
+        case .spend: return formatMoney(point.cost, currency: data?.currency ?? "CNY")
+        case .inputTokens: return formatInteger(point.inputTokens)
+        case .outputTokens: return formatInteger(point.outputTokens)
+        case .requests: return formatInteger(point.requests)
+        }
+    }
+
     private func chartValue(_ point: PlatformDailyUsage) -> Double {
+        switch selectedMetric {
+        case .spend: return NSDecimalNumber(decimal: point.cost).doubleValue
+        case .inputTokens: return Double(point.inputTokens)
+        case .outputTokens: return Double(point.outputTokens)
+        case .requests: return Double(point.requests)
+        }
+    }
+
+    private func chartValue(_ point: PlatformHourlyUsage) -> Double {
         switch selectedMetric {
         case .spend: return NSDecimalNumber(decimal: point.cost).doubleValue
         case .inputTokens: return Double(point.inputTokens)
