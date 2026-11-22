@@ -186,7 +186,10 @@ struct RootView: View {
                 DashboardShellView(onSignOut: session.signOut)
             }
         }
-        .animation(.easeInOut(duration: 0.22), value: routeKey)
+        .id(routeKey)
+        .transition(.opacity.combined(with: .scale(scale: 0.985)))
+        .buttonStyle(DSGlobalButtonStyle())
+        .animation(DSMotion.page, value: routeKey)
         .task {
             await session.restoreSessionIfPossible()
         }
@@ -227,6 +230,7 @@ extension View {
                     .stroke(DSTheme.line.opacity(0.65), lineWidth: 0.7)
             }
             .shadow(color: DSTheme.purple.opacity(0.045), radius: 13, x: 0, y: 6)
+            .modifier(DSEntranceModifier(delay: 0.035))
     }
 }
 
@@ -248,6 +252,7 @@ struct PageHeader: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.top, 16)
         .padding(.bottom, 2)
+        .dsEntrance(delay: 0.02)
     }
 }
 
@@ -298,6 +303,7 @@ struct MetricCard: View {
                     .foregroundStyle(DSTheme.secondary)
             }
             Text(value)
+                .contentTransition(.numericText())
                 .font(.system(size: 22, weight: .bold, design: .rounded))
                 .foregroundStyle(DSTheme.secondary)
         }
@@ -414,6 +420,7 @@ struct WelcomeView: View {
                     .padding(.bottom, 34)
             }
             .padding(.horizontal, 24)
+            .dsEntrance()
         }
     }
 }
@@ -490,6 +497,7 @@ struct LoginView: View {
             .background(.white)
         }
         .background { Color.white.ignoresSafeArea() }
+        .dsEntrance()
     }
 }
 
@@ -568,16 +576,20 @@ struct DashboardShellView: View {
                     case .settings: SettingsView(onSignOut: onSignOut)
                     }
                 }
+                .id(selectedTab)
+                .transition(.opacity.combined(with: .move(edge: .trailing)))
+                .animation(DSMotion.page, value: selectedTab)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
 
                 HStack(spacing: 0) {
                     ForEach(DashboardTab.allCases) { tab in
                         Button {
-                            selectedTab = tab
+                            withAnimation(DSMotion.selection) { selectedTab = tab }
                         } label: {
                             VStack(spacing: 4) {
                                 Image(systemName: selectedTab == tab ? tab.selectedIcon : tab.icon)
                                     .font(.system(size: 19, weight: .medium))
+                                    .symbolEffect(.bounce, value: selectedTab == tab)
                                 Text(tab.rawValue)
                                     .font(.system(size: 10,
                                                   weight: selectedTab == tab ? .semibold : .regular))
@@ -587,7 +599,7 @@ struct DashboardShellView: View {
                             .frame(height: 56)
                             .contentShape(Rectangle())
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(DSGlobalButtonStyle())
                     }
                 }
                 .padding(.top, 5)
@@ -598,6 +610,7 @@ struct DashboardShellView: View {
             }
             .background(DSTheme.canvas.ignoresSafeArea())
             .toolbar(.hidden, for: .navigationBar)
+            .sensoryFeedback(.selection, trigger: selectedTab)
         }
         .task(id: autoRefreshTaskID) {
             guard scenePhase == .active, let interval = autoRefreshInterval else { return }
@@ -666,6 +679,7 @@ struct OverviewView: View {
                             .background(DSTheme.purple.opacity(0.09), in: Capsule())
                     }
                     Text(formatMoney(data?.totalBalance, currency: data?.currency ?? "CNY"))
+                        .contentTransition(.numericText())
                         .font(.system(size: 32, weight: .bold, design: .rounded))
                         .foregroundStyle(DSTheme.ink)
                     HStack(spacing: 14) {
@@ -741,6 +755,7 @@ struct OverviewView: View {
             .padding(.horizontal, 16)
         }
         .background(DSTheme.canvas)
+        .animation(DSMotion.data, value: data?.synchronizedAt)
         .task {
             if session.dashboardData == nil {
                 await session.refreshPlatformData()
@@ -904,7 +919,7 @@ struct AnalyticsView: View {
                                 .background(selectedRange == range ? DSTheme.blue.opacity(0.08) : .clear,
                                             in: Capsule())
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(DSGlobalButtonStyle())
                     }
                 }
                 .padding(5)
@@ -930,7 +945,7 @@ struct AnalyticsView: View {
                                         }
                                     }
                             }
-                            .buttonStyle(.plain)
+                            .buttonStyle(DSGlobalButtonStyle())
                         }
                     }
                 }
@@ -1077,6 +1092,9 @@ struct AnalyticsView: View {
             .padding(.horizontal, 16)
         }
         .background(DSTheme.canvas)
+        .animation(DSMotion.selection, value: selectedRange)
+        .animation(DSMotion.selection, value: selectedMetric)
+        .animation(DSMotion.data, value: data?.synchronizedAt)
     }
     private var metricTitle: String {
         switch selectedMetric {
@@ -1129,6 +1147,7 @@ struct AnalyticsView: View {
             Spacer()
             Text(value)
                 .font(.system(size: 13, weight: .semibold, design: .rounded))
+                .contentTransition(.numericText())
                 .foregroundStyle(DSTheme.secondary)
         }
     }
@@ -1198,7 +1217,7 @@ struct ModelsView: View {
                                                                startPoint: .leading, endPoint: .trailing),
                                             in: Capsule())
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(DSGlobalButtonStyle())
                     }
                 }
                 .padding(5)
@@ -1304,6 +1323,8 @@ struct ModelsView: View {
             .padding(.bottom, 16)
         }
         .background(DSTheme.canvas)
+        .animation(DSMotion.selection, value: selectedRange)
+        .animation(DSMotion.data, value: data?.synchronizedAt)
     }
 }
 
@@ -1391,7 +1412,7 @@ struct RecordsView: View {
                             } label: {
                                 RequestRecordRow(record: record)
                             }
-                            .buttonStyle(.plain)
+                            .buttonStyle(DSGlobalButtonStyle())
                         }
                     }
                 }
@@ -1540,7 +1561,7 @@ struct SettingsView: View {
                             tint: DSTheme.coral
                         )
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(DSGlobalButtonStyle())
                 }
                 .font(.system(size: 13, weight: .medium))
                 .foregroundStyle(DSTheme.ink)
