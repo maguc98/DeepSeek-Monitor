@@ -797,9 +797,24 @@ struct AnalyticsView: View {
         }
     }
     private var selectedValue: String {
-        if selectedRange == .day, let selectedHour { return displayValue(for: selectedHour) }
-        if let selectedPoint { return displayValue(for: selectedPoint) }
-        return "—"
+        if selectedRange == .day {
+            if let selectedHour { return displayValue(for: selectedHour) }
+            guard !visibleHours.isEmpty else { return "—" }
+        } else {
+            if let selectedPoint { return displayValue(for: selectedPoint) }
+            guard !visibleDays.isEmpty else { return "—" }
+        }
+
+        switch selectedMetric {
+        case .spend:
+            return formatMoney(summarySpend, currency: data?.currency ?? "CNY")
+        case .inputTokens:
+            return formatInteger(summaryInput)
+        case .outputTokens:
+            return formatInteger(summaryOutput)
+        case .requests:
+            return formatInteger(summaryRequests)
+        }
     }
 
     private var summaryInput: Int {
