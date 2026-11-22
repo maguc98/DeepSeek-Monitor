@@ -214,15 +214,15 @@ struct RootView: View {
 // MARK: - Visual system
 
 enum DSTheme {
-    static let canvas = Color(red: 0.965, green: 0.961, blue: 0.988)
+    static let canvas = Color(red: 0.957, green: 0.961, blue: 0.980)
     static let card = Color.white
-    static let blue = Color(red: 0.24, green: 0.43, blue: 0.96)
-    static let purple = Color(red: 0.48, green: 0.29, blue: 0.91)
-    static let mint = Color(red: 0.19, green: 0.72, blue: 0.54)
-    static let coral = Color(red: 0.94, green: 0.39, blue: 0.42)
-    static let ink = Color(red: 0.12, green: 0.14, blue: 0.22)
-    static let secondary = Color(red: 0.48, green: 0.49, blue: 0.57)
-    static let line = Color(red: 0.91, green: 0.91, blue: 0.95)
+    static let blue = Color(red: 0.27, green: 0.47, blue: 0.94)
+    static let purple = Color(red: 0.49, green: 0.36, blue: 0.88)
+    static let mint = Color(red: 0.18, green: 0.68, blue: 0.53)
+    static let coral = Color(red: 0.91, green: 0.38, blue: 0.43)
+    static let ink = Color(red: 0.105, green: 0.125, blue: 0.20)
+    static let secondary = Color(red: 0.45, green: 0.48, blue: 0.56)
+    static let line = Color(red: 0.89, green: 0.90, blue: 0.94)
 
     static let brandGradient = LinearGradient(
         colors: [blue, purple], startPoint: .leading, endPoint: .trailing
@@ -231,13 +231,13 @@ enum DSTheme {
 
 extension View {
     func dsCard(_ radius: CGFloat = 19) -> some View {
-        background(.white, in: RoundedRectangle(cornerRadius: radius, style: .continuous))
+        background(DSTheme.card, in: RoundedRectangle(cornerRadius: radius, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: radius, style: .continuous)
-                    .stroke(DSTheme.line.opacity(0.65), lineWidth: 0.7)
+                    .stroke(DSTheme.line.opacity(0.72), lineWidth: 0.8)
             }
-            .shadow(color: DSTheme.purple.opacity(0.045), radius: 13, x: 0, y: 6)
-            .modifier(DSEntranceModifier(delay: 0.035))
+            .shadow(color: DSTheme.ink.opacity(0.035), radius: 16, x: 0, y: 7)
+            .modifier(DSEntranceModifier(delay: 0.025))
     }
 }
 
@@ -248,7 +248,7 @@ struct PageHeader: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(title)
-                .font(.system(size: 23, weight: .bold, design: .rounded))
+                 .font(.system(size: 24, weight: .bold, design: .rounded))
                 .foregroundStyle(DSTheme.ink)
             if let subtitle {
                 Text(subtitle)
@@ -311,8 +311,8 @@ struct MetricCard: View {
             }
             Text(value)
                 .contentTransition(.numericText())
-                .font(.system(size: 22, weight: .bold, design: .rounded))
-                .foregroundStyle(DSTheme.secondary)
+                .font(.system(size: 23, weight: .bold, design: .rounded))
+                .foregroundStyle(DSTheme.ink)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(14)
@@ -755,20 +755,48 @@ struct OverviewView: View {
                                 x: .value("日期", point.date),
                                 y: .value("费用", NSDecimalNumber(decimal: point.cost).doubleValue)
                             )
-                            .foregroundStyle(DSTheme.purple.opacity(0.12))
+                            .foregroundStyle(
+                                LinearGradient(
+                                    colors: [DSTheme.purple.opacity(0.22), DSTheme.purple.opacity(0.015)],
+                                    startPoint: .top,
+                                    endPoint: .bottom
+                                )
+                            )
                             LineMark(
                                 x: .value("日期", point.date),
                                 y: .value("费用", NSDecimalNumber(decimal: point.cost).doubleValue)
                             )
                             .foregroundStyle(DSTheme.purple)
-                            .interpolationMethod(.catmullRom)
+                            .lineStyle(StrokeStyle(lineWidth: 2.6, lineCap: .round, lineJoin: .round))
+                            .interpolationMethod(.monotone)
                             PointMark(
                                 x: .value("日期", point.date),
                                 y: .value("费用", NSDecimalNumber(decimal: point.cost).doubleValue)
                             )
-                            .foregroundStyle(DSTheme.purple)
+                            .foregroundStyle(.white)
+                            .symbolSize(34)
+                            .annotation(position: .overlay) {
+                                Circle().fill(DSTheme.purple).frame(width: 5, height: 5)
+                            }
                         }
-                        .frame(height: 175)
+                        .chartYScale(domain: .automatic(includesZero: true))
+                        .chartYAxis {
+                            AxisMarks(position: .leading, values: .automatic(desiredCount: 4)) { _ in
+                                AxisGridLine().foregroundStyle(DSTheme.line.opacity(0.8))
+                                AxisValueLabel().foregroundStyle(DSTheme.secondary)
+                            }
+                        }
+                        .chartXAxis {
+                            AxisMarks(values: .automatic(desiredCount: 4)) { _ in
+                                AxisGridLine().foregroundStyle(.clear)
+                                AxisValueLabel().foregroundStyle(DSTheme.secondary)
+                            }
+                        }
+                        .chartPlotStyle { plot in
+                            plot.padding(.top, 8).padding(.trailing, 8)
+                        }
+                        .frame(height: 190)
+                        .animation(DSMotion.data, value: recent.last?.date)
                     }
                 }
                 .padding(15)
@@ -1017,23 +1045,36 @@ struct AnalyticsView: View {
                                 x: .value("小时", point.date),
                                 y: .value("数值", chartValue(point))
                             )
-                            .foregroundStyle(DSTheme.purple.opacity(0.12))
+                            .foregroundStyle(LinearGradient(
+                                colors: [DSTheme.purple.opacity(0.20), DSTheme.purple.opacity(0.015)],
+                                startPoint: .top, endPoint: .bottom
+                            ))
                             LineMark(
                                 x: .value("小时", point.date),
                                 y: .value("数值", chartValue(point))
                             )
                             .foregroundStyle(DSTheme.purple)
-                            .interpolationMethod(.catmullRom)
-                            PointMark(
-                                x: .value("小时", point.date),
-                                y: .value("数值", chartValue(point))
-                            )
-                            .foregroundStyle(DSTheme.purple)
+                            .lineStyle(StrokeStyle(lineWidth: 2.7, lineCap: .round, lineJoin: .round))
+                            .interpolationMethod(.monotone)
                         }
                         .chartXSelection(value: $selectedDate)
-                        .frame(height: 205)
+                        .chartYAxis {
+                            AxisMarks(position: .leading, values: .automatic(desiredCount: 4)) { _ in
+                                AxisGridLine().foregroundStyle(DSTheme.line.opacity(0.8))
+                                AxisValueLabel().foregroundStyle(DSTheme.secondary)
+                            }
+                        }
+                        .chartXAxis {
+                            AxisMarks(values: .automatic(desiredCount: 4)) { _ in
+                                AxisGridLine().foregroundStyle(.clear)
+                                AxisValueLabel().foregroundStyle(DSTheme.secondary)
+                            }
+                        }
+                        .chartPlotStyle { plot in plot.padding(.top, 8).padding(.trailing, 8) }
+                        .frame(height: 220)
+                        .animation(DSMotion.data, value: visibleHours.last?.date)
                         HStack {
-                            Text(selectedHour?.date.formatted(date: .omitted, time: .shortened) ?? "今天")
+                            Text(selectedHour.map { $0.date.formatted(date: .omitted, time: .shortened) } ?? "今天")
                             Spacer()
                             Text("单日接口 · 小时桶")
                         }
@@ -1045,25 +1086,38 @@ struct AnalyticsView: View {
                                 x: .value("日期", point.date),
                                 y: .value("数值", chartValue(point))
                             )
-                            .foregroundStyle(DSTheme.purple.opacity(0.12))
+                            .foregroundStyle(LinearGradient(
+                                colors: [DSTheme.purple.opacity(0.20), DSTheme.purple.opacity(0.015)],
+                                startPoint: .top, endPoint: .bottom
+                            ))
                             LineMark(
                                 x: .value("日期", point.date),
                                 y: .value("数值", chartValue(point))
                             )
                             .foregroundStyle(DSTheme.purple)
-                            .interpolationMethod(.catmullRom)
-                            PointMark(
-                                x: .value("日期", point.date),
-                                y: .value("数值", chartValue(point))
-                            )
-                            .foregroundStyle(DSTheme.purple)
+                            .lineStyle(StrokeStyle(lineWidth: 2.7, lineCap: .round, lineJoin: .round))
+                            .interpolationMethod(.monotone)
                         }
                         .chartXSelection(value: $selectedDate)
-                        .frame(height: 205)
+                        .chartYAxis {
+                            AxisMarks(position: .leading, values: .automatic(desiredCount: 4)) { _ in
+                                AxisGridLine().foregroundStyle(DSTheme.line.opacity(0.8))
+                                AxisValueLabel().foregroundStyle(DSTheme.secondary)
+                            }
+                        }
+                        .chartXAxis {
+                            AxisMarks(values: .automatic(desiredCount: 5)) { _ in
+                                AxisGridLine().foregroundStyle(.clear)
+                                AxisValueLabel().foregroundStyle(DSTheme.secondary)
+                            }
+                        }
+                        .chartPlotStyle { plot in plot.padding(.top, 8).padding(.trailing, 8) }
+                        .frame(height: 220)
+                        .animation(DSMotion.data, value: visibleDays.last?.date)
                         HStack {
                             Text(selectedPoint?.date.formatted(date: .abbreviated, time: .omitted) ?? "最近 \(selectedRange.rawValue)")
                             Spacer()
-                            Text("点击图表查看数值")
+                            Text("拖动图表查看数据")
                         }
                         .font(.system(size: 11))
                         .foregroundStyle(DSTheme.secondary)
