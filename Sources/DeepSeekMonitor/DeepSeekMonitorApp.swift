@@ -349,7 +349,7 @@ struct LoginView: View {
             .padding(.bottom, 12)
             .background(.white)
         }
-        .background(.white.ignoresSafeArea())
+        .background { Color.white.ignoresSafeArea() }
     }
 }
 
