@@ -183,32 +183,53 @@ struct TokenTrendComparisonPanel: View {
                             y: .value("Token", day.inputTokens),
                             series: .value("类型", "输入")
                         )
-                        .foregroundStyle(DSTheme.blue.opacity(0.12))
+                        .foregroundStyle(LinearGradient(
+                            colors: [DSTheme.blue.opacity(0.17), DSTheme.blue.opacity(0.01)],
+                            startPoint: .top, endPoint: .bottom
+                        ))
                         LineMark(
                             x: .value("日期", day.date),
                             y: .value("Token", day.inputTokens),
                             series: .value("类型", "输入")
                         )
                         .foregroundStyle(DSTheme.blue)
-                        .interpolationMethod(.catmullRom)
+                        .lineStyle(StrokeStyle(lineWidth: 2.4, lineCap: .round, lineJoin: .round))
+                        .interpolationMethod(.monotone)
 
                         AreaMark(
                             x: .value("日期", day.date),
                             y: .value("Token", day.outputTokens),
                             series: .value("类型", "输出")
                         )
-                        .foregroundStyle(DSTheme.purple.opacity(0.10))
+                        .foregroundStyle(LinearGradient(
+                            colors: [DSTheme.purple.opacity(0.15), DSTheme.purple.opacity(0.01)],
+                            startPoint: .top, endPoint: .bottom
+                        ))
                         LineMark(
                             x: .value("日期", day.date),
                             y: .value("Token", day.outputTokens),
                             series: .value("类型", "输出")
                         )
                         .foregroundStyle(DSTheme.purple)
-                        .interpolationMethod(.catmullRom)
+                        .lineStyle(StrokeStyle(lineWidth: 2.4, lineCap: .round, lineJoin: .round))
+                        .interpolationMethod(.monotone)
                     }
                 }
-                .chartLegend(position: .bottom, alignment: .leading)
-                .frame(height: 190)
+                .chartYAxis {
+                    AxisMarks(position: .leading, values: .automatic(desiredCount: 4)) { _ in
+                        AxisGridLine().foregroundStyle(DSTheme.line.opacity(0.8))
+                        AxisValueLabel().foregroundStyle(DSTheme.secondary)
+                    }
+                }
+                .chartXAxis {
+                    AxisMarks(values: .automatic(desiredCount: 5)) { _ in
+                        AxisGridLine().foregroundStyle(.clear)
+                        AxisValueLabel().foregroundStyle(DSTheme.secondary)
+                    }
+                }
+                .chartPlotStyle { plot in plot.padding(.top, 8).padding(.trailing, 8) }
+                .chartLegend(position: .bottom, alignment: .leading, spacing: 14)
+                .frame(height: 210)
                 .animation(DSMotion.data, value: days.reduce(0) { $0 + $1.inputTokens + $1.outputTokens })
                 .transition(.opacity.combined(with: .scale(scale: 0.985)))
             }
