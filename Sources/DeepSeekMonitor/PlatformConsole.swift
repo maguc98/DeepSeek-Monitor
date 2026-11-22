@@ -147,7 +147,7 @@ final class DeepSeekPlatformSession: ObservableObject {
 
     func loadPlatformPageAndWait() async {
         if webView.url?.host == platformHost && !webView.isLoading { return }
-        guard let url = URL(string: "https://platform.deepseek.com/") else { return }
+        guard let url = URL(string: "https://platform.deepseek.com/usage") else { return }
         await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
             loadObserver.onLoadFinished = {
                 continuation.resume()
@@ -158,7 +158,7 @@ final class DeepSeekPlatformSession: ObservableObject {
 
     func loadLoginPage() {
         if webView.url?.host == platformHost { return }
-        guard let url = URL(string: "https://platform.deepseek.com/") else { return }
+        guard let url = URL(string: "https://platform.deepseek.com/usage") else { return }
         webView.load(URLRequest(url: url))
     }
 
