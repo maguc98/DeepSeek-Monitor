@@ -212,3 +212,80 @@ struct TokenTrendComparisonPanel: View {
         .dsCard()
     }
 }
+
+struct ModelRequestDistributionPanel: View {
+    let models: [PlatformDailyModelUsage]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 11) {
+            Text("模型请求占比")
+                .font(.system(size: 15, weight: .bold))
+                .foregroundStyle(DSTheme.ink)
+            let items = models.filter { $0.requests > 0 }
+            if items.isEmpty {
+                EmptyDataPanel(title: "暂无请求分布", message: "平台没有返回模型请求次数。", icon: "chart.pie")
+            } else {
+                Chart(items) { item in
+                    SectorMark(
+                        angle: .value("请求", item.requests),
+                        innerRadius: .ratio(0.60),
+                        angularInset: 2
+                    )
+                    .foregroundStyle(by: .value("模型", item.model))
+                }
+                .frame(height: 190)
+                .chartLegend(position: .bottom, alignment: .leading)
+                HStack {
+                    Text("总请求数")
+                        .font(.system(size: 11))
+                        .foregroundStyle(DSTheme.secondary)
+                    Spacer()
+                    Text(items.reduce(0) { $0 + $1.requests }.formatted())
+                        .font(.system(size: 18, weight: .bold, design: .rounded))
+                        .foregroundStyle(DSTheme.ink)
+                }
+            }
+        }
+        .padding(15)
+        .dsCard()
+    }
+}
+
+struct ModelTokenComparisonPanel: View {
+    let models: [PlatformDailyModelUsage]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 11) {
+            Text("各模型 Token 对比")
+                .font(.system(size: 15, weight: .bold))
+                .foregroundStyle(DSTheme.ink)
+            if models.isEmpty {
+                EmptyDataPanel(title: "暂无模型 Token", message: "同步模型级 Token 数据后会显示排行。")
+            } else {
+                Chart {
+                    ForEach(models) { model in
+                        BarMark(
+                            x: .value("Token", model.inputTokens),
+                            y: .value("模型", model.model),
+                            height: .ratio(0.34)
+                        )
+                        .foregroundStyle(DSTheme.blue)
+                        .position(by: .value("类型", "输入"))
+
+                        BarMark(
+                            x: .value("Token", model.outputTokens),
+                            y: .value("模型", model.model),
+                            height: .ratio(0.34)
+                        )
+                        .foregroundStyle(DSTheme.purple)
+                        .position(by: .value("类型", "输出"))
+                    }
+                }
+                .chartLegend(position: .bottom, alignment: .leading)
+                .frame(height: CGFloat(max(150, models.count * 48)))
+            }
+        }
+        .padding(15)
+        .dsCard()
+    }
+}
