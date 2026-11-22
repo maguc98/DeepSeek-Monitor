@@ -119,6 +119,27 @@ final class DeepSeekPlatformSession: ObservableObject {
         return data
     }
 
+    func clearWebSession() async {
+        let store = webView.configuration.websiteDataStore
+        let records: [WKWebsiteDataRecord] = await withCheckedContinuation { continuation in
+            store.fetchDataRecords(ofTypes: WKWebsiteDataStore.allWebsiteDataTypes()) {
+                continuation.resume(returning: $0)
+            }
+        }
+        let platformRecords = records.filter { $0.displayName.contains("deepseek.com") }
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            store.removeData(
+                ofTypes: WKWebsiteDataStore.allWebsiteDataTypes(),
+                for: platformRecords
+            ) {
+                continuation.resume()
+            }
+        }
+        webView.loadHTMLString("", baseURL: nil)
+        isAuthenticated = false
+        lastError = nil
+    }
+
     private func currentMonthRange() -> (start: Int, end: Int) {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = platformTimeZone

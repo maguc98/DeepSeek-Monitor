@@ -22,11 +22,13 @@ enum RootRoute { case welcome, login, dashboard }
 enum AccountConnectionState {
     case notConnected
     case awaitingVerification
+    case connected
 
     var title: String {
         switch self {
         case .notConnected: return "尚未连接"
         case .awaitingVerification: return "等待账户校验"
+        case .connected: return "已连接"
         }
     }
 }
@@ -35,45 +37,60 @@ enum AccountConnectionState {
 final class AppSession: ObservableObject {
     @Published var route: RootRoute = .welcome
     @Published var connectionState: AccountConnectionState = .notConnected
+    @Published var dashboardData: PlatformDashboardData?
+    @Published var connectionMessage: String?
+    @Published var isSyncing = false
 
-    func beginLogin() { route = .login }
+    let platformSession = DeepSeekPlatformSession()
 
-    func finishLoginFlow() {
-        // Returning from the web view is not proof that data access works.
-        connectionState = .awaitingVerification
-        route = .dashboard
+    func beginLogin() {
+        connectionMessage = nil
+        route = .login
+    }
+
+    func finishLoginFlow() async {
+        guard !isSyncing else { return }
+        isSyncing = true
+        connectionMessage = nil
+        defer { isSyncing = false }
+
+        do {
+            dashboardData = try await platformSession.fetchDashboard()
+            connectionState = .connected
+            connectionMessage = dashboardData?.usageAvailable == true
+                ? "账户与用量数据已同步。"
+                : "账户会话有效，但用量统计接口暂未返回数据。"
+            route = .dashboard
+        } catch {
+            connectionState = .awaitingVerification
+            connectionMessage = error.localizedDescription
+        }
+    }
+
+    func refreshPlatformData() async {
+        guard !isSyncing else { return }
+        isSyncing = true
+        defer { isSyncing = false }
+        do {
+            dashboardData = try await platformSession.fetchDashboard()
+            connectionState = .connected
+            connectionMessage = dashboardData?.usageAvailable == true
+                ? "数据同步完成。"
+                : "账户已验证，但本次未获得用量统计数据。"
+        } catch {
+            connectionMessage = error.localizedDescription
+            if dashboardData == nil {
+                connectionState = .awaitingVerification
+            }
+        }
     }
 
     func signOut() {
+        dashboardData = nil
+        connectionMessage = nil
         connectionState = .notConnected
         route = .welcome
-    }
-}
-
-struct RootView: View {
-    @EnvironmentObject private var session: AppSession
-
-    var body: some View {
-        Group {
-            switch session.route {
-            case .welcome:
-                WelcomeView(onContinue: session.beginLogin)
-            case .login:
-                LoginView(onCancel: { session.route = .welcome },
-                          onFinished: session.finishLoginFlow)
-            case .dashboard:
-                DashboardShellView(onSignOut: session.signOut)
-            }
-        }
-        .animation(.easeInOut(duration: 0.2), value: routeKey)
-    }
-
-    private var routeKey: Int {
-        switch session.route {
-        case .welcome: return 0
-        case .login: return 1
-        case .dashboard: return 2
-        }
+        Task { await platformSession.clearWebSession() }
     }
 }
 
@@ -295,8 +312,10 @@ struct WelcomeView: View {
 }
 
 struct LoginView: View {
+    @EnvironmentObject private var session: AppSession
     let onCancel: () -> Void
-    let onFinished: () -> Void
+    let onFinished: () async -> Void
+    @State private var checking = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -328,18 +347,32 @@ struct LoginView: View {
             .padding(.horizontal, 15)
             .padding(.bottom, 8)
 
-            PlatformLoginWebView()
+            PlatformLoginWebView(session: session.platformSession)
 
             VStack(spacing: 9) {
-                Button(action: onFinished) {
-                    Text("我已完成登录，返回应用")
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(.white)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 50)
-                        .background(DSTheme.brandGradient, in: Capsule())
+                if let message = session.connectionMessage,
+                   session.connectionState != .connected {
+                    StatusBanner(title: "连接验证未完成", message: message)
                 }
-                Text("返回后仍会验证数据连接状态；此按钮不会直接认定账户已连接。")
+                Button {
+                    Task {
+                        checking = true
+                        await onFinished()
+                        checking = false
+                    }
+                } label: {
+                    HStack(spacing: 8) {
+                        if checking { ProgressView().tint(.white) }
+                        Text(checking ? "正在验证账户…" : "我已完成登录，验证账户")
+                    }
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 50)
+                    .background(DSTheme.brandGradient, in: Capsule())
+                }
+                .disabled(checking || session.isSyncing)
+                Text("应用会在 DeepSeek 官方网页会话中读取账户统计，不会收集密码。")
                     .font(.system(size: 11))
                     .foregroundStyle(DSTheme.secondary)
                     .multilineTextAlignment(.center)
@@ -354,15 +387,16 @@ struct LoginView: View {
 }
 
 private struct PlatformLoginWebView: UIViewRepresentable {
+    let session: DeepSeekPlatformSession
+
     func makeUIView(context: Context) -> WKWebView {
-        let configuration = WKWebViewConfiguration()
-        configuration.websiteDataStore = .default()
-        let webView = WKWebView(frame: .zero, configuration: configuration)
-        webView.load(URLRequest(url: URL(string: "https://platform.deepseek.com/")!))
-        return webView
+        session.loadLoginPage()
+        return session.webView
     }
 
-    func updateUIView(_ webView: WKWebView, context: Context) {}
+    func updateUIView(_ webView: WKWebView, context: Context) {
+        session.loadLoginPage()
+    }
 }
 
 // MARK: - Dashboard tabs
@@ -449,64 +483,10 @@ struct DashboardShellView: View {
 
 // MARK: - Overview
 
-struct DashboardSnapshot {
-    var accountBalance: Decimal? = nil
-    var todaySpend: Decimal? = nil
-    var totalSpend: Decimal? = nil
-    var todayRequests: Int? = nil
-    var todayTokens: Int? = nil
-    var lastSynchronizedAt: Date? = nil
-
-    static let unavailable = DashboardSnapshot()
-}
-
-enum MonitorDataError: LocalizedError {
-    case adapterNotConfigured
-
-    var errorDescription: String? {
-        "DeepSeek 控制台数据适配器尚未接入。当前不会显示模拟数据。"
-    }
-}
-
-protocol MonitorRepository {
-    func fetchDashboard() async throws -> DashboardSnapshot
-}
-
-struct DeepSeekConsoleRepository: MonitorRepository {
-    func fetchDashboard() async throws -> DashboardSnapshot {
-        throw MonitorDataError.adapterNotConfigured
-    }
-}
-
-@MainActor
-final class DashboardViewModel: ObservableObject {
-    @Published private(set) var snapshot = DashboardSnapshot.unavailable
-    @Published private(set) var isRefreshing = false
-    @Published private(set) var statusMessage = "数据源尚未接入，当前不显示演示数值。"
-
-    private let repository: MonitorRepository
-
-    init(repository: MonitorRepository = DeepSeekConsoleRepository()) {
-        self.repository = repository
-    }
-
-    func refresh() async {
-        guard !isRefreshing else { return }
-        isRefreshing = true
-        defer { isRefreshing = false }
-        do {
-            snapshot = try await repository.fetchDashboard()
-            statusMessage = "数据已更新"
-        } catch {
-            snapshot = .unavailable
-            statusMessage = error.localizedDescription
-        }
-    }
-}
-
 struct OverviewView: View {
     @EnvironmentObject private var session: AppSession
-    @StateObject private var viewModel = DashboardViewModel()
+
+    private var data: PlatformDashboardData? { session.dashboardData }
 
     var body: some View {
         ScrollView(showsIndicators: false) {
@@ -517,59 +497,65 @@ struct OverviewView: View {
                             .font(.system(size: 22, weight: .bold, design: .rounded))
                             .foregroundStyle(DSTheme.ink)
                         HStack(spacing: 5) {
-                            Circle().fill(DSTheme.coral).frame(width: 7, height: 7)
-                            Text(session.connectionState.title + " · 尚未同步")
+                            Circle()
+                                .fill(session.connectionState == .connected ? DSTheme.mint : DSTheme.coral)
+                                .frame(width: 7, height: 7)
+                            Text(session.connectionState.title + " · " + syncTime)
                                 .font(.system(size: 11))
                                 .foregroundStyle(DSTheme.secondary)
                         }
                     }
                     Spacer()
                     Button {
-                        Task { await viewModel.refresh() }
+                        Task { await session.refreshPlatformData() }
                     } label: {
-                        Image(systemName: viewModel.isRefreshing ? "arrow.triangle.2.circlepath" : "arrow.clockwise")
+                        Image(systemName: session.isSyncing ? "arrow.triangle.2.circlepath" : "arrow.clockwise")
                             .font(.system(size: 16, weight: .semibold))
                             .foregroundStyle(DSTheme.blue)
                             .frame(width: 42, height: 42)
                             .background(.white, in: Circle())
                     }
-                    .disabled(viewModel.isRefreshing)
+                    .disabled(session.isSyncing)
                 }
                 .padding(.top, 14)
 
-                VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: 11) {
                     HStack {
                         Text("账户余额")
                             .font(.system(size: 13, weight: .medium))
                             .foregroundStyle(DSTheme.secondary)
                         Spacer()
-                        Text("官方数据待接入")
+                        Text(data == nil ? "等待验证" : "控制台实时数据")
                             .font(.system(size: 10, weight: .medium))
                             .foregroundStyle(DSTheme.purple)
                             .padding(.horizontal, 9)
                             .padding(.vertical, 5)
                             .background(DSTheme.purple.opacity(0.09), in: Capsule())
                     }
-                    HStack(alignment: .firstTextBaseline, spacing: 5) {
-                        Text("¥").font(.system(size: 20, weight: .semibold))
-                        Text("—").font(.system(size: 32, weight: .bold, design: .rounded))
+                    Text(formatMoney(data?.totalBalance, currency: data?.currency ?? "CNY"))
+                        .font(.system(size: 32, weight: .bold, design: .rounded))
+                        .foregroundStyle(DSTheme.ink)
+                    HStack(spacing: 14) {
+                        Text("充值余额  " + formatMoney(data?.normalBalance, currency: data?.currency ?? "CNY"))
+                        Text("赠金余额  " + formatMoney(data?.bonusBalance, currency: data?.currency ?? "CNY"))
                     }
-                    .foregroundStyle(DSTheme.ink)
-                    Text("连接并验证账户后显示")
-                        .font(.system(size: 11))
-                        .foregroundStyle(DSTheme.secondary)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(DSTheme.secondary)
                 }
                 .padding(17)
                 .dsCard(20)
 
                 LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 11) {
-                    MetricCard(title: "今日消费", value: "—", icon: "calendar", tint: DSTheme.coral)
-                    MetricCard(title: "累计消费", value: "—", icon: "chart.line.uptrend.xyaxis", tint: DSTheme.purple)
-                    MetricCard(title: "今日调用", value: "—", icon: "arrow.left.arrow.right", tint: DSTheme.mint)
-                    MetricCard(title: "今日 Token", value: "—", icon: "number", tint: DSTheme.blue)
+                    MetricCard(title: "今日消费", value: formatMoney(data?.todaySpend, currency: data?.currency ?? "CNY"), icon: "calendar", tint: DSTheme.coral)
+                    MetricCard(title: "累计消费", value: formatMoney(data?.totalSpend, currency: data?.currency ?? "CNY"), icon: "chart.line.uptrend.xyaxis", tint: DSTheme.purple)
+                    MetricCard(title: "今日调用", value: formatInteger(data?.todayRequests), icon: "arrow.left.arrow.right", tint: DSTheme.mint)
+                    MetricCard(title: "今日 Token", value: formatInteger(data?.todayTokens), icon: "number", tint: DSTheme.blue)
                 }
 
-                StatusBanner(title: session.connectionState.title, message: viewModel.statusMessage)
+                StatusBanner(
+                    title: session.connectionState.title,
+                    message: session.connectionMessage ?? "尚未从 DeepSeek 控制台完成数据验证。"
+                )
 
                 VStack(alignment: .leading, spacing: 12) {
                     HStack {
@@ -577,19 +563,43 @@ struct OverviewView: View {
                             .font(.system(size: 16, weight: .bold))
                             .foregroundStyle(DSTheme.ink)
                         Spacer()
-                        Text("¥")
+                        Text(data?.currency == "USD" ? "$" : "¥")
                             .font(.system(size: 11, weight: .medium))
                             .foregroundStyle(DSTheme.secondary)
                     }
-                    EmptyDataPanel(
-                        title: "暂无趋势数据",
-                        message: "完成账户连接并成功同步后，这里会显示真实的每日消费折线图。"
-                    )
+
+                    let recent = Array((data?.dailyUsage ?? []).suffix(7))
+                    if recent.isEmpty {
+                        EmptyDataPanel(
+                            title: "暂无趋势数据",
+                            message: "控制台用量接口尚未返回可绘制的日统计数据。"
+                        )
+                    } else {
+                        Chart(recent) { point in
+                            AreaMark(
+                                x: .value("日期", point.date),
+                                y: .value("费用", NSDecimalNumber(decimal: point.cost).doubleValue)
+                            )
+                            .foregroundStyle(DSTheme.purple.opacity(0.12))
+                            LineMark(
+                                x: .value("日期", point.date),
+                                y: .value("费用", NSDecimalNumber(decimal: point.cost).doubleValue)
+                            )
+                            .foregroundStyle(DSTheme.purple)
+                            .interpolationMethod(.catmullRom)
+                            PointMark(
+                                x: .value("日期", point.date),
+                                y: .value("费用", NSDecimalNumber(decimal: point.cost).doubleValue)
+                            )
+                            .foregroundStyle(DSTheme.purple)
+                        }
+                        .frame(height: 175)
+                    }
                 }
                 .padding(15)
                 .dsCard()
 
-                Text("数据仅展示经过平台验证的结果。")
+                Text("最后同步：" + (data?.synchronizedAt.formatted(date: .abbreviated, time: .shortened) ?? "尚未同步"))
                     .font(.system(size: 10))
                     .foregroundStyle(DSTheme.secondary)
                     .frame(maxWidth: .infinity)
@@ -598,8 +608,32 @@ struct OverviewView: View {
             .padding(.horizontal, 16)
         }
         .background(DSTheme.canvas)
-        .task { await viewModel.refresh() }
+        .task {
+            if session.dashboardData == nil {
+                await session.refreshPlatformData()
+            }
+        }
     }
+
+    private var syncTime: String {
+        data?.synchronizedAt.formatted(date: .omitted, time: .shortened) ?? "尚未同步"
+    }
+}
+
+private func formatMoney(_ value: Decimal?, currency: String) -> String {
+    guard let value else { return "—" }
+    let formatter = NumberFormatter()
+    formatter.numberStyle = .decimal
+    formatter.minimumFractionDigits = 2
+    formatter.maximumFractionDigits = 2
+    let number = formatter.string(from: NSDecimalNumber(decimal: value)) ?? "—"
+    let symbol = currency == "USD" ? "$" : (currency == "CNY" ? "¥" : currency + " ")
+    return symbol + number
+}
+
+private func formatInteger(_ value: Int?) -> String {
+    guard let value else { return "—" }
+    return value.formatted()
 }
 
 // MARK: - Usage analytics
@@ -895,7 +929,7 @@ struct RecordsView: View {
                 if records.isEmpty {
                     EmptyDataPanel(
                         title: "暂无调用记录",
-                        message: "目前还没有从 DeepSeek 控制台读取到请求记录。连接数据源后，这里会显示模型、时间、Token 和费用。",
+                        message: "目前验证到的控制台接口只提供每日、按模型汇总的数据，没有确认可读取逐条请求 ID 与请求内容的接口。为避免伪造调用记录，这里暂不生成明细。",
                         icon: "doc.text.magnifyingglass"
                     )
                     .padding(.top, 3)
@@ -993,6 +1027,7 @@ struct RecordDetailView: View {
 // MARK: - Settings
 
 struct SettingsView: View {
+    @EnvironmentObject private var session: AppSession
     let onSignOut: () -> Void
     @AppStorage("monitor.syncInterval") private var syncInterval = "每 5 分钟"
 
@@ -1014,7 +1049,7 @@ struct SettingsView: View {
                         Text("DeepSeek 账户")
                             .font(.system(size: 14, weight: .semibold))
                             .foregroundStyle(DSTheme.ink)
-                        Text("登录状态：等待账户校验")
+                        Text("登录状态：" + session.connectionState.title)
                             .font(.system(size: 11))
                             .foregroundStyle(DSTheme.secondary)
                     }
