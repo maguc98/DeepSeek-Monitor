@@ -1,7 +1,7 @@
 import Foundation
 import WebKit
 
-struct PlatformHourlyUsage: Identifiable {
+struct PlatformHourlyUsage: Identifiable, Codable {
     let id: Int
     let date: Date
     let cost: Decimal
@@ -14,7 +14,7 @@ struct PlatformHourlyUsage: Identifiable {
     var cacheTokens: Int { cacheHitTokens + cacheMissTokens }
 }
 
-struct PlatformDailyModelUsage: Identifiable {
+struct PlatformDailyModelUsage: Identifiable, Codable {
     let id: String
     let model: String
     let cost: Decimal
@@ -24,7 +24,7 @@ struct PlatformDailyModelUsage: Identifiable {
     let requests: Int
 }
 
-struct PlatformDailyUsage: Identifiable {
+struct PlatformDailyUsage: Identifiable, Codable {
     let id: String
     let date: Date
     let cost: Decimal
@@ -42,7 +42,7 @@ struct PlatformDailyUsage: Identifiable {
     var cacheTokens: Int { cacheHitTokens + cacheMissTokens }
 }
 
-struct PlatformModelUsage: Identifiable {
+struct PlatformModelUsage: Identifiable, Codable {
     let id: String
     let model: String
     let cost: Decimal
@@ -51,7 +51,7 @@ struct PlatformModelUsage: Identifiable {
     let requests: Int
 }
 
-struct PlatformDashboardData {
+struct PlatformDashboardData: Codable {
     let currency: String
     let totalBalance: Decimal?
     let normalBalance: Decimal?

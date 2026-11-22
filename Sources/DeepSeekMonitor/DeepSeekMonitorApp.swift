@@ -40,9 +40,23 @@ final class AppSession: ObservableObject {
     @Published var dashboardData: PlatformDashboardData?
     @Published var connectionMessage: String?
     @Published var isSyncing = false
+    @Published var isDashboardDataStale = false
 
     let platformSession = DeepSeekPlatformSession()
     private let hasLinkedAccountKey = "monitor.hasLinkedAccount"
+    private let dashboardSnapshotKey = "monitor.dashboardSnapshot"
+
+    init() {
+        if UserDefaults.standard.bool(forKey: hasLinkedAccountKey),
+           let snapshot = UserDefaults.standard.data(forKey: dashboardSnapshotKey),
+           let decoded = try? JSONDecoder().decode(PlatformDashboardData.self, from: snapshot) {
+            dashboardData = decoded
+            isDashboardDataStale = true
+            connectionState = .awaitingVerification
+            route = .dashboard
+            connectionMessage = "正在验证登录状态，暂时显示上次同步的数据。"
+        }
+    }
 
     func beginLogin() {
         connectionMessage = nil
@@ -51,9 +65,11 @@ final class AppSession: ObservableObject {
 
     func restoreSessionIfPossible() async {
         guard UserDefaults.standard.bool(forKey: hasLinkedAccountKey), !isSyncing else { return }
-        route = .login
+        if dashboardData == nil { route = .login }
         connectionState = .awaitingVerification
-        connectionMessage = "正在恢复上次的 DeepSeek 登录状态…"
+        connectionMessage = dashboardData == nil
+            ? "正在恢复上次的 DeepSeek 登录状态…"
+            : "正在验证登录状态，当前展示的是本机缓存。"
         isSyncing = true
         defer { isSyncing = false }
 
@@ -61,14 +77,19 @@ final class AppSession: ObservableObject {
             await platformSession.loadPlatformPageAndWait()
             dashboardData = try await platformSession.fetchDashboard()
             connectionState = .connected
+            isDashboardDataStale = false
+            saveDashboardSnapshot()
             connectionMessage = dashboardData?.usageAvailable == true
                 ? "已恢复登录并同步账户数据。"
                 : "登录已恢复，但本次未获得用量统计数据。"
             route = .dashboard
         } catch {
             connectionState = .awaitingVerification
-            connectionMessage = error.localizedDescription
-            route = .login
+            isDashboardDataStale = dashboardData != nil
+            connectionMessage = dashboardData == nil
+                ? error.localizedDescription
+                : "\(error.localizedDescription) 当前继续显示上次同步的缓存数据。"
+            route = dashboardData == nil ? .login : .dashboard
         }
     }
 
@@ -81,7 +102,9 @@ final class AppSession: ObservableObject {
         do {
             dashboardData = try await platformSession.fetchDashboard()
             connectionState = .connected
+            isDashboardDataStale = false
             UserDefaults.standard.set(true, forKey: hasLinkedAccountKey)
+            saveDashboardSnapshot()
             connectionMessage = dashboardData?.usageAvailable == true
                 ? "账户与用量数据已同步。"
                 : "账户会话有效，但用量统计接口暂未返回数据。"
@@ -99,10 +122,13 @@ final class AppSession: ObservableObject {
         do {
             dashboardData = try await platformSession.fetchDashboard()
             connectionState = .connected
+            isDashboardDataStale = false
+            saveDashboardSnapshot()
             connectionMessage = dashboardData?.usageAvailable == true
                 ? "数据同步完成。"
                 : "账户已验证，但本次未获得用量统计数据。"
         } catch {
+            isDashboardDataStale = dashboardData != nil
             connectionMessage = error.localizedDescription
             if let consoleError = error as? PlatformConsoleError {
                 switch consoleError {
@@ -118,13 +144,28 @@ final class AppSession: ObservableObject {
         }
     }
 
+    func clearCachedDashboard() {
+        dashboardData = nil
+        isDashboardDataStale = false
+        UserDefaults.standard.removeObject(forKey: dashboardSnapshotKey)
+        connectionMessage = "本机统计缓存已清除。"
+    }
+
     func signOut() {
         dashboardData = nil
+        isDashboardDataStale = false
         connectionMessage = nil
         connectionState = .notConnected
         UserDefaults.standard.set(false, forKey: hasLinkedAccountKey)
+        UserDefaults.standard.removeObject(forKey: dashboardSnapshotKey)
         route = .welcome
         Task { await platformSession.clearWebSession() }
+    }
+
+    private func saveDashboardSnapshot() {
+        guard let dashboardData,
+              let encoded = try? JSONEncoder().encode(dashboardData) else { return }
+        UserDefaults.standard.set(encoded, forKey: dashboardSnapshotKey)
     }
 }
 
@@ -594,7 +635,7 @@ struct OverviewView: View {
                             Circle()
                                 .fill(session.connectionState == .connected ? DSTheme.mint : DSTheme.coral)
                                 .frame(width: 7, height: 7)
-                            Text(session.connectionState.title + " · " + syncTime)
+                            Text(session.connectionState.title + " · " + syncTime + (session.isDashboardDataStale ? " · 缓存" : ""))
                                 .font(.system(size: 11))
                                 .foregroundStyle(DSTheme.secondary)
                         }
@@ -647,7 +688,7 @@ struct OverviewView: View {
                 }
 
                 StatusBanner(
-                    title: session.connectionState.title,
+                    title: session.isDashboardDataStale ? "正在使用缓存数据" : session.connectionState.title,
                     message: session.connectionMessage ?? "尚未从 DeepSeek 控制台完成数据验证。"
                 )
 
@@ -1470,9 +1511,19 @@ struct SettingsView: View {
                     settingsDivider
                     settingsRow("通知提醒", detail: "数据服务接入后启用", icon: "bell")
                     settingsDivider
-                    settingsRow("数据缓存", detail: "本地存储", icon: "externaldrive")
+                    settingsRow("数据缓存", detail: "最近一次统计快照保存在本机", icon: "externaldrive")
                     settingsDivider
-                    settingsRow("清除缓存", detail: "暂不可用", icon: "trash", tint: DSTheme.coral)
+                    Button(role: .destructive) {
+                        session.clearCachedDashboard()
+                    } label: {
+                        settingsRow(
+                            "清除缓存",
+                            detail: session.dashboardData == nil ? "暂无缓存" : "清除统计快照",
+                            icon: "trash",
+                            tint: DSTheme.coral
+                        )
+                    }
+                    .buttonStyle(.plain)
                 }
                 .font(.system(size: 13, weight: .medium))
                 .foregroundStyle(DSTheme.ink)
@@ -1488,7 +1539,7 @@ struct SettingsView: View {
                 .dsCard()
 
                 Button(role: .destructive, action: onSignOut) {
-                    Text("返回欢迎页面")
+                    Text("退出 DeepSeek 账户")
                         .font(.system(size: 14, weight: .semibold))
                         .foregroundStyle(DSTheme.coral)
                         .frame(maxWidth: .infinity)
