@@ -1055,7 +1055,7 @@ struct AnalyticsView: View {
                             )
                             .foregroundStyle(DSTheme.purple)
                             .lineStyle(StrokeStyle(lineWidth: 2.7, lineCap: .round, lineJoin: .round))
-                            .interpolationMethod(.monotone)
+                            .interpolationMethod(.linear)
                             if let selectedHour {
                                 RuleMark(x: .value("选中时间", selectedHour.date))
                                     .foregroundStyle(DSTheme.blue.opacity(0.78))
@@ -1077,6 +1077,7 @@ struct AnalyticsView: View {
                             }
                         }
                         .chartXSelection(value: $selectedDate)
+                        .chartYScale(domain: .automatic(includesZero: true))
                         .chartYAxis {
                             AxisMarks(position: .leading, values: .automatic(desiredCount: 4)) { _ in
                                 AxisGridLine().foregroundStyle(DSTheme.line.opacity(0.8))
@@ -1115,7 +1116,7 @@ struct AnalyticsView: View {
                             )
                             .foregroundStyle(DSTheme.purple)
                             .lineStyle(StrokeStyle(lineWidth: 2.7, lineCap: .round, lineJoin: .round))
-                            .interpolationMethod(.monotone)
+                            .interpolationMethod(.linear)
                             if let selectedPoint {
                                 RuleMark(x: .value("选中日期", selectedPoint.date))
                                     .foregroundStyle(DSTheme.blue.opacity(0.78))
@@ -1137,6 +1138,7 @@ struct AnalyticsView: View {
                             }
                         }
                         .chartXSelection(value: $selectedDate)
+                        .chartYScale(domain: .automatic(includesZero: true))
                         .chartYAxis {
                             AxisMarks(position: .leading, values: .automatic(desiredCount: 4)) { _ in
                                 AxisGridLine().foregroundStyle(DSTheme.line.opacity(0.8))
