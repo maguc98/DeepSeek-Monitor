@@ -36,7 +36,7 @@ struct PlatformDailyUsage: Identifiable {
     let models: [PlatformDailyModelUsage]
 
     var totalTokens: Int {
-        inputTokens + cacheHitTokens + cacheMissTokens + outputTokens
+        inputTokens + outputTokens
     }
 
     var cacheTokens: Int { cacheHitTokens + cacheMissTokens }
@@ -68,6 +68,8 @@ struct PlatformDashboardData {
     let usageAvailable: Bool
     let tokenUsageAvailable: Bool
     let costUsageAvailable: Bool
+    let hourlyTokenUsageAvailable: Bool
+    let hourlyCostUsageAvailable: Bool
 }
 
 enum PlatformConsoleError: LocalizedError {
@@ -232,7 +234,8 @@ final class DeepSeekPlatformSession: ObservableObject {
           headers: {
             "Accept": "application/json",
             "Authorization": authorization,
-            "x-app-version": "1.0.0"
+            "x-app-version": "1.0.0",
+            "x-client-platform": "web"
           }
         });
         return { status: response.status, body: await response.text() };
@@ -413,18 +416,24 @@ private enum PlatformDashboardParser {
             bonusBalance: bonusBalance,
             totalSpend: totalSpend,
             last30DaysSpend: cost == nil ? nil : last30DaysSpend,
-            todaySpend: cost == nil ? nil : today?.cost,
-            todayRequests: amount == nil ? nil : today?.requests,
-            todayTokens: amount == nil ? nil : today.map {
-                $0.inputTokens + $0.cacheHitTokens + $0.cacheMissTokens + $0.outputTokens
-            },
+            todaySpend: hourlyCost != nil
+                ? hours.values.reduce(Decimal.zero) { $0 + $1.cost }
+                : (cost == nil ? nil : today?.cost),
+            todayRequests: hourlyAmount != nil
+                ? hours.values.reduce(0) { $0 + $1.requests }
+                : (amount == nil ? nil : today?.requests),
+            todayTokens: hourlyAmount != nil
+                ? hours.values.reduce(0) { $0 + $1.inputTokens + $1.outputTokens }
+                : (amount == nil ? nil : today.map { $0.inputTokens + $0.outputTokens }),
             dailyUsage: dailyUsage,
             hourlyUsage: hourlyUsage,
             modelUsage: modelUsage,
             synchronizedAt: now,
             usageAvailable: amount != nil || cost != nil,
             tokenUsageAvailable: amount != nil,
-            costUsageAvailable: cost != nil
+            costUsageAvailable: cost != nil,
+            hourlyTokenUsageAvailable: hourlyAmount != nil,
+            hourlyCostUsageAvailable: hourlyCost != nil
         )
     }
 
@@ -473,9 +482,12 @@ private enum PlatformDashboardParser {
                 var hour = hours[key] ?? HourAccumulator(
                     date: Date(timeIntervalSince1970: timestamp)
                 )
-                hour.inputTokens += integer(usage["PROMPT_TOKEN"])
-                hour.cacheHitTokens += integer(usage["PROMPT_CACHE_HIT_TOKEN"])
-                hour.cacheMissTokens += integer(usage["PROMPT_CACHE_MISS_TOKEN"])
+                let prompt = integer(usage["PROMPT_TOKEN"])
+                let cacheHit = integer(usage["PROMPT_CACHE_HIT_TOKEN"])
+                let cacheMiss = integer(usage["PROMPT_CACHE_MISS_TOKEN"])
+                hour.inputTokens += prompt + cacheHit + cacheMiss
+                hour.cacheHitTokens += cacheHit
+                hour.cacheMissTokens += cacheMiss
                 hour.outputTokens += integer(usage["RESPONSE_TOKEN"])
                 hour.requests += integer(usage["REQUEST"])
                 hours[key] = hour
@@ -535,18 +547,18 @@ private enum PlatformDashboardParser {
                 let output = integer(usage["RESPONSE_TOKEN"])
                 let requests = integer(usage["REQUEST"])
 
-                day.inputTokens += prompt
+                day.inputTokens += prompt + cacheHit + cacheMiss
                 day.cacheHitTokens += cacheHit
                 day.cacheMissTokens += cacheMiss
                 day.outputTokens += output
                 day.requests += requests
-                modelValue.inputTokens += prompt
+                modelValue.inputTokens += prompt + cacheHit + cacheMiss
                 modelValue.cacheHitTokens += cacheHit
                 modelValue.cacheMissTokens += cacheMiss
                 modelValue.outputTokens += output
                 modelValue.requests += requests
 
-                dailyModelValue.inputTokens += prompt
+                dailyModelValue.inputTokens += prompt + cacheHit + cacheMiss
                 dailyModelValue.cacheHitTokens += cacheHit
                 dailyModelValue.cacheMissTokens += cacheMiss
                 dailyModelValue.outputTokens += output

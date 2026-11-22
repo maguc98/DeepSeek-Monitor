@@ -718,6 +718,13 @@ struct AnalyticsView: View {
         }
     }
     private var metricAvailable: Bool {
+        if selectedRange == .day {
+            switch selectedMetric {
+            case .spend: return data?.hourlyCostUsageAvailable == true
+            case .inputTokens, .outputTokens, .requests:
+                return data?.hourlyTokenUsageAvailable == true
+            }
+        }
         switch selectedMetric {
         case .spend: return data?.costUsageAvailable == true
         case .inputTokens, .outputTokens, .requests:
@@ -898,20 +905,30 @@ struct AnalyticsView: View {
                     Text("用量总览（\(selectedRange.rawValue)）")
                         .font(.system(size: 15, weight: .bold))
                         .foregroundStyle(DSTheme.ink)
-                    summaryRow("消费", value: data?.costUsageAvailable == true
+                    summaryRow("消费", value: ((selectedRange == .day
+                               ? data?.hourlyCostUsageAvailable
+                               : data?.costUsageAvailable) == true)
                                ? formatMoney(summarySpend, currency: data?.currency ?? "CNY") : "—",
                                icon: "yensign.circle")
                     Divider().overlay(DSTheme.line)
-                    summaryRow("输入 Token", value: data?.tokenUsageAvailable == true
+                    summaryRow("输入 Token", value: ((selectedRange == .day
+                               ? data?.hourlyTokenUsageAvailable
+                               : data?.tokenUsageAvailable) == true)
                                ? formatInteger(summaryInput) : "—", icon: "arrow.down.circle")
                     Divider().overlay(DSTheme.line)
-                    summaryRow("输出 Token", value: data?.tokenUsageAvailable == true
+                    summaryRow("输出 Token", value: ((selectedRange == .day
+                               ? data?.hourlyTokenUsageAvailable
+                               : data?.tokenUsageAvailable) == true)
                                ? formatInteger(summaryOutput) : "—", icon: "arrow.up.circle")
                     Divider().overlay(DSTheme.line)
-                    summaryRow("缓存 Token", value: data?.tokenUsageAvailable == true
+                    summaryRow("缓存 Token", value: ((selectedRange == .day
+                               ? data?.hourlyTokenUsageAvailable
+                               : data?.tokenUsageAvailable) == true)
                                ? formatInteger(summaryCache) : "—", icon: "tray")
                     Divider().overlay(DSTheme.line)
-                    summaryRow("API 请求", value: data?.tokenUsageAvailable == true
+                    summaryRow("API 请求", value: ((selectedRange == .day
+                               ? data?.hourlyTokenUsageAvailable
+                               : data?.tokenUsageAvailable) == true)
                                ? formatInteger(summaryRequests) : "—", icon: "arrow.left.arrow.right")
                 }
                 .padding(15)
@@ -1116,7 +1133,9 @@ struct ModelsView: View {
                                     Text(model.model)
                                         .font(.system(size: 13, weight: .semibold))
                                         .foregroundStyle(DSTheme.ink)
-                                    Text("输入 \(formatInteger(model.inputTokens)) · 输出 \(formatInteger(model.outputTokens))")
+                                    Text(data?.tokenUsageAvailable == true
+                                         ? "输入 \(formatInteger(model.inputTokens)) · 缓存 \(formatInteger(model.cacheTokens)) · 输出 \(formatInteger(model.outputTokens))"
+                                         : "Token 数据暂不可用")
                                         .font(.system(size: 10))
                                         .foregroundStyle(DSTheme.secondary)
                                 }

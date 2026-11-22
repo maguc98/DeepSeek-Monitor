@@ -9,8 +9,10 @@ Checked against the public DeepSeek API documentation and public community imple
 | Current balance | GET https://api.deepseek.com/user/balance | API Key Bearer | Official documented API | Schema documented; optional API-key route, not required for the embedded-session prototype |
 | Available models | GET https://api.deepseek.com/models | API Key Bearer | Official documented API | Model catalogue only; not usage history |
 | Account summary | GET /api/v0/users/get_user_summary on platform.deepseek.com | Platform web-session token | Undocumented internal console route | Isolated in DeepSeekPlatformSession; defensive parsing and graceful errors |
-| Daily token/request usage | GET /api/v0/usage/by_api_key/amount?start=&end=&tz= | Platform web-session token | Undocumented internal console route | Daily/model aggregate data only |
-| Daily cost | GET /api/v0/usage/by_api_key/cost?start=&end=&tz= | Platform web-session token | Undocumented internal console route | Daily/model aggregate data only |
+| Hourly token/request usage | GET /api/v0/usage/by_api_key/amount?start=&end=&tz= for one local day | Platform web-session token | Undocumented internal console route | Hourly/model aggregate buckets for the current day |
+| Daily token/request usage | GET /api/v0/usage/by_api_key/amount?start=&end=&tz= for a multi-day range | Platform web-session token | Undocumented internal console route | Daily/model aggregate data only |
+| Hourly cost | GET /api/v0/usage/by_api_key/cost?start=&end=&tz= for one local day | Platform web-session token | Undocumented internal console route | Hourly/model aggregate buckets for the current day |
+| Daily cost | GET /api/v0/usage/by_api_key/cost?start=&end=&tz= for a multi-day range | Platform web-session token | Undocumented internal console route | Daily/model aggregate data only |
 | Per-request detail history | No verified route | Unknown | Not verified | Keep request list/detail empty until a supported source is identified |
 
 ## Session handling
@@ -31,7 +33,9 @@ These payload observations are community-reported, not guaranteed by DeepSeek. T
 
 ## Important product limitations
 
-- The daily usage endpoints provide aggregate daily/model values, not a verified per-request event feed.
+- The single-day by-api-key query is reported by community protocol notes to return hourly (3600-second) buckets; multi-day ranges return daily (86400-second) buckets. This behavior is not a DeepSeek public API guarantee.
+- The usage endpoints provide aggregate time/model/API-key values, not a verified per-request event feed.
 - The app must not fabricate per-request rows or request IDs.
 - The API usage field in a model response describes that single response; it does not reveal past activity from other clients.
+- The app currently requests a rolling 30-day daily window plus a separate current-day hourly window.
 - Historical usage beyond the range exposed by the console must remain unavailable.

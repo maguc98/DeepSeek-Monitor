@@ -12,12 +12,14 @@ The initial SwiftUI implementation follows the approved eight-screen reference: 
 - [x] Welcome page and embedded DeepSeek Platform web sign-in
 - [x] Overview, analytics, models, records, record-detail, and settings screens
 - [x] Empty and unavailable states instead of fabricated account metrics
-- [x] Repository protocol for the future platform data adapter
+- [x] Embedded WKWebView console adapter for account summary and usage buckets
+- [x] Current-day hourly buckets plus rolling 30-day daily buckets
+- [x] Shared data models for dashboard, trend chart, and model breakdown
 - [x] XcodeGen project definition and iOS Simulator build workflow
-- [ ] Inspect authenticated DeepSeek console pages and verify available data sources
-- [ ] Implement the data adapter and account/session validation
+- [ ] Validate token storage and private console routes with a real signed-in account on device
 - [ ] Persist timestamped observations with SwiftData
-- [ ] Connect verified values to charts and request details
+- [x] Connect verified daily/hourly aggregate data to charts and model usage
+- [ ] Identify a supported per-request history source before implementing real request records
 - [ ] Add refresh scheduling, cache lifecycle, and notifications
 
 ## Build
