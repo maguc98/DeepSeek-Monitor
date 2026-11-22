@@ -94,6 +94,35 @@ final class AppSession: ObservableObject {
     }
 }
 
+struct RootView: View {
+    @EnvironmentObject private var session: AppSession
+
+    var body: some View {
+        Group {
+            switch session.route {
+            case .welcome:
+                WelcomeView(onContinue: session.beginLogin)
+            case .login:
+                LoginView(
+                    onCancel: { session.route = .welcome },
+                    onFinished: session.finishLoginFlow
+                )
+            case .dashboard:
+                DashboardShellView(onSignOut: session.signOut)
+            }
+        }
+        .animation(.easeInOut(duration: 0.22), value: routeKey)
+    }
+
+    private var routeKey: Int {
+        switch session.route {
+        case .welcome: return 0
+        case .login: return 1
+        case .dashboard: return 2
+        }
+    }
+}
+
 // MARK: - Visual system
 
 enum DSTheme {

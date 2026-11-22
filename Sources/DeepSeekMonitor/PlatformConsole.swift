@@ -181,8 +181,8 @@ final class DeepSeekPlatformSession: ObservableObject {
         return { status: response.status, body: await response.text() };
         """
 
-        let result = try await evaluateJavaScript(script, arguments: ["path": path])
-        guard let response = result as? [String: Any],
+        guard let result = try await evaluateJavaScript(script, arguments: ["path": path]),
+              let response = result as? [String: Any],
               let status = response["status"] as? Int,
               let body = response["body"] as? String else {
             throw PlatformConsoleError.invalidResponse
@@ -201,7 +201,7 @@ final class DeepSeekPlatformSession: ObservableObject {
         return dictionary
     }
 
-    private func evaluateJavaScript(_ body: String, arguments: [String: Any]) async throws -> Any {
+    private func evaluateJavaScript(_ body: String, arguments: [String: Any]) async throws -> Any? {
         try await webView.callAsyncJavaScript(
             body,
             arguments: arguments,
