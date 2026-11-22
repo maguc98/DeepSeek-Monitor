@@ -54,6 +54,8 @@ struct TokenCompositionPanel: View {
                 }
                 .frame(height: 190)
                 .chartLegend(position: .bottom, alignment: .leading, spacing: 12)
+                .animation(DSMotion.data, value: total)
+                .transition(.opacity.combined(with: .scale(scale: 0.985)))
                 .overlay {
                     VStack(spacing: 3) {
                         Text(total.formatted())
@@ -125,6 +127,7 @@ struct UsageHeatmapPanel: View {
                             RoundedRectangle(cornerRadius: 5)
                                 .fill(DSTheme.blue.opacity(intensity(day.totalTokens, maximum: maximum)))
                                 .frame(height: 25)
+                                .animation(.easeInOut(duration: 0.38), value: day.totalTokens)
                                 .overlay {
                                     if day.totalTokens == 0 {
                                         RoundedRectangle(cornerRadius: 5)
@@ -206,6 +209,8 @@ struct TokenTrendComparisonPanel: View {
                 }
                 .chartLegend(position: .bottom, alignment: .leading)
                 .frame(height: 190)
+                .animation(DSMotion.data, value: days.reduce(0) { $0 + $1.inputTokens + $1.outputTokens })
+                .transition(.opacity.combined(with: .scale(scale: 0.985)))
             }
         }
         .padding(15)
@@ -235,6 +240,8 @@ struct ModelRequestDistributionPanel: View {
                 }
                 .frame(height: 190)
                 .chartLegend(position: .bottom, alignment: .leading)
+                .animation(DSMotion.data, value: items.reduce(0) { $0 + $1.requests })
+                .transition(.opacity.combined(with: .scale(scale: 0.985)))
                 HStack {
                     Text("总请求数")
                         .font(.system(size: 11))
@@ -283,6 +290,8 @@ struct ModelTokenComparisonPanel: View {
                 }
                 .chartLegend(position: .bottom, alignment: .leading)
                 .frame(height: CGFloat(max(150, models.count * 48)))
+                .animation(DSMotion.data, value: models.reduce(0) { $0 + $1.inputTokens + $1.outputTokens })
+                .transition(.opacity.combined(with: .scale(scale: 0.985)))
             }
         }
         .padding(15)
