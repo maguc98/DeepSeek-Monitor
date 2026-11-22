@@ -171,6 +171,7 @@ final class AppSession: ObservableObject {
 
 struct RootView: View {
     @EnvironmentObject private var session: AppSession
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         Group {
@@ -190,6 +191,12 @@ struct RootView: View {
         .transition(.opacity.combined(with: .scale(scale: 0.985)))
         .buttonStyle(DSGlobalButtonStyle())
         .animation(DSMotion.page, value: routeKey)
+        .transaction { transaction in
+            if reduceMotion {
+                transaction.disablesAnimations = true
+                transaction.animation = nil
+            }
+        }
         .task {
             await session.restoreSessionIfPossible()
         }
