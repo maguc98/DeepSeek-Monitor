@@ -823,7 +823,7 @@ struct ModelsView: View {
 
 // MARK: - Request records and details
 
-struct RequestRecord: Identifiable {
+struct RequestRecord: Identifiable, Hashable {
     let id: String
     let model: String
     let createdAt: Date
@@ -833,9 +833,47 @@ struct RequestRecord: Identifiable {
     let succeeded: Bool
 }
 
+struct RequestRecordRow: View {
+    let record: RequestRecord
+
+    var body: some View {
+        HStack(spacing: 11) {
+            Image(systemName: record.succeeded ? "checkmark.circle.fill" : "xmark.circle.fill")
+                .foregroundStyle(record.succeeded ? DSTheme.mint : DSTheme.coral)
+                .font(.system(size: 17))
+            VStack(alignment: .leading, spacing: 5) {
+                Text(record.model)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(DSTheme.ink)
+                Text(record.createdAt.formatted(date: .numeric, time: .shortened))
+                    .font(.system(size: 10))
+                    .foregroundStyle(DSTheme.secondary)
+                HStack(spacing: 12) {
+                    Text("输入 \(record.inputTokens.map(String.init) ?? "—")")
+                    Text("输出 \(record.outputTokens.map(String.init) ?? "—")")
+                }
+                .font(.system(size: 10))
+                .foregroundStyle(DSTheme.secondary)
+            }
+            Spacer()
+            VStack(alignment: .trailing, spacing: 5) {
+                Text(record.cost.map { "¥\($0)" } ?? "—")
+                    .font(.system(size: 12, weight: .bold, design: .rounded))
+                    .foregroundStyle(DSTheme.ink)
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(DSTheme.secondary)
+            }
+        }
+        .padding(14)
+        .dsCard(15)
+    }
+}
+
 struct RecordsView: View {
     @State private var selectedPeriod = "过去 7 天"
     @State private var selectedModel = "全部模型"
+    @State private var records: [RequestRecord] = []
 
     var body: some View {
         ScrollView(showsIndicators: false) {
@@ -854,12 +892,25 @@ struct RecordsView: View {
                         }
                     } label: { filterLabel(selectedModel) }
                 }
-                EmptyDataPanel(
-                    title: "暂无调用记录",
-                    message: "目前还没有从 DeepSeek 控制台读取到请求记录。连接数据源后，这里会显示模型、时间、Token 和费用。",
-                    icon: "doc.text.magnifyingglass"
-                )
-                .padding(.top, 3)
+                if records.isEmpty {
+                    EmptyDataPanel(
+                        title: "暂无调用记录",
+                        message: "目前还没有从 DeepSeek 控制台读取到请求记录。连接数据源后，这里会显示模型、时间、Token 和费用。",
+                        icon: "doc.text.magnifyingglass"
+                    )
+                    .padding(.top, 3)
+                } else {
+                    LazyVStack(spacing: 10) {
+                        ForEach(records) { record in
+                            NavigationLink {
+                                RecordDetailView(record: record)
+                            } label: {
+                                RequestRecordRow(record: record)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
             }
             .padding(.horizontal, 16)
         }
