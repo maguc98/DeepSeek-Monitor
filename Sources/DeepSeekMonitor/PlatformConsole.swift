@@ -103,19 +103,57 @@ enum PlatformConsoleError: LocalizedError {
 /// code, logged, persisted separately, or sent to a third-party server. Console
 /// routes are undocumented implementation details and may change.
 @MainActor
+private final class PlatformPageLoadObserver: NSObject, WKNavigationDelegate {
+    var onLoadFinished: (() -> Void)?
+
+    private func finish() {
+        let callback = onLoadFinished
+        onLoadFinished = nil
+        callback?()
+    }
+
+    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        finish()
+    }
+
+    func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+        finish()
+    }
+
+    func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+        finish()
+    }
+}
+
+@MainActor
 final class DeepSeekPlatformSession: ObservableObject {
     let webView: WKWebView
     @Published private(set) var isAuthenticated = false
     @Published private(set) var lastError: String?
 
+    private let loadObserver: PlatformPageLoadObserver
     private let platformHost = "platform.deepseek.com"
     private let platformTimeZone = TimeZone(secondsFromGMT: 8 * 60 * 60)!
 
     init() {
         let configuration = WKWebViewConfiguration()
         configuration.websiteDataStore = .default()
-        self.webView = WKWebView(frame: .zero, configuration: configuration)
-        self.webView.allowsBackForwardNavigationGestures = true
+        let view = WKWebView(frame: .zero, configuration: configuration)
+        self.webView = view
+        self.loadObserver = PlatformPageLoadObserver()
+        view.navigationDelegate = loadObserver
+        view.allowsBackForwardNavigationGestures = true
+    }
+
+    func loadPlatformPageAndWait() async {
+        if webView.url?.host == platformHost && !webView.isLoading { return }
+        guard let url = URL(string: "https://platform.deepseek.com/") else { return }
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            loadObserver.onLoadFinished = {
+                continuation.resume()
+            }
+            webView.load(URLRequest(url: url))
+        }
     }
 
     func loadLoginPage() {

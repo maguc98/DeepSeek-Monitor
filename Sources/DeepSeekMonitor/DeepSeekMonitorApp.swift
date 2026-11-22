@@ -42,10 +42,34 @@ final class AppSession: ObservableObject {
     @Published var isSyncing = false
 
     let platformSession = DeepSeekPlatformSession()
+    private let hasLinkedAccountKey = "monitor.hasLinkedAccount"
 
     func beginLogin() {
         connectionMessage = nil
         route = .login
+    }
+
+    func restoreSessionIfPossible() async {
+        guard UserDefaults.standard.bool(forKey: hasLinkedAccountKey), !isSyncing else { return }
+        route = .login
+        connectionState = .awaitingVerification
+        connectionMessage = "正在恢复上次的 DeepSeek 登录状态…"
+        isSyncing = true
+        defer { isSyncing = false }
+
+        do {
+            await platformSession.loadPlatformPageAndWait()
+            dashboardData = try await platformSession.fetchDashboard()
+            connectionState = .connected
+            connectionMessage = dashboardData?.usageAvailable == true
+                ? "已恢复登录并同步账户数据。"
+                : "登录已恢复，但本次未获得用量统计数据。"
+            route = .dashboard
+        } catch {
+            connectionState = .awaitingVerification
+            connectionMessage = error.localizedDescription
+            route = .login
+        }
     }
 
     func finishLoginFlow() async {
@@ -57,6 +81,7 @@ final class AppSession: ObservableObject {
         do {
             dashboardData = try await platformSession.fetchDashboard()
             connectionState = .connected
+            UserDefaults.standard.set(true, forKey: hasLinkedAccountKey)
             connectionMessage = dashboardData?.usageAvailable == true
                 ? "账户与用量数据已同步。"
                 : "账户会话有效，但用量统计接口暂未返回数据。"
@@ -79,7 +104,15 @@ final class AppSession: ObservableObject {
                 : "账户已验证，但本次未获得用量统计数据。"
         } catch {
             connectionMessage = error.localizedDescription
-            if dashboardData == nil {
+            if let consoleError = error as? PlatformConsoleError {
+                switch consoleError {
+                case .unauthorized, .tokenNotFound, .pageNotReady:
+                    connectionState = .awaitingVerification
+                    route = .login
+                default:
+                    break
+                }
+            } else if dashboardData == nil {
                 connectionState = .awaitingVerification
             }
         }
@@ -89,6 +122,7 @@ final class AppSession: ObservableObject {
         dashboardData = nil
         connectionMessage = nil
         connectionState = .notConnected
+        UserDefaults.standard.set(false, forKey: hasLinkedAccountKey)
         route = .welcome
         Task { await platformSession.clearWebSession() }
     }
@@ -112,6 +146,9 @@ struct RootView: View {
             }
         }
         .animation(.easeInOut(duration: 0.22), value: routeKey)
+        .task {
+            await session.restoreSessionIfPossible()
+        }
     }
 
     private var routeKey: Int {
