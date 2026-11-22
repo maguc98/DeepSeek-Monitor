@@ -584,19 +584,18 @@ struct DashboardShellView: View {
                     }
                 }
                 .id(selectedTab)
-                .transition(.opacity.combined(with: .move(edge: .trailing)))
-                .animation(DSMotion.page, value: selectedTab)
+                .transition(.opacity)
+                .animation(.easeInOut(duration: 0.18), value: selectedTab)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
 
                 HStack(spacing: 0) {
                     ForEach(DashboardTab.allCases) { tab in
                         Button {
-                            withAnimation(DSMotion.selection) { selectedTab = tab }
+                            withAnimation(.easeInOut(duration: 0.18)) { selectedTab = tab }
                         } label: {
                             VStack(spacing: 4) {
                                 Image(systemName: selectedTab == tab ? tab.selectedIcon : tab.icon)
                                     .font(.system(size: 19, weight: .medium))
-                                    .symbolEffect(.bounce, value: selectedTab == tab)
                                 Text(tab.rawValue)
                                     .font(.system(size: 10,
                                                   weight: selectedTab == tab ? .semibold : .regular))
@@ -606,9 +605,10 @@ struct DashboardShellView: View {
                             .frame(height: 56)
                             .contentShape(Rectangle())
                         }
-                        .buttonStyle(DSGlobalButtonStyle())
+                        .buttonStyle(.plain)
                     }
                 }
+                .animation(.easeInOut(duration: 0.18), value: selectedTab)
                 .padding(.top, 5)
                 .background(.white)
                 .overlay(alignment: .top) {
