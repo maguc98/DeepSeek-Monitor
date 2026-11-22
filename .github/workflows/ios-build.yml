@@ -13,6 +13,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+      - name: Generate app icon
+        run: swift .github/scripts/generate_app_icon.swift
       - name: Install XcodeGen
         run: brew install xcodegen
       - name: Generate Xcode project
