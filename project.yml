@@ -24,4 +24,5 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.maguc98.DeepSeekMonitor
         PRODUCT_NAME: DeepSeek Monitor
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         SWIFT_VERSION: 5.9
