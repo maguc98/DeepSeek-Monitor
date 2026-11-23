@@ -200,6 +200,17 @@ struct UsageHeatmapPanel: View {
 struct TokenTrendComparisonPanel: View {
     let days: [PlatformDailyUsage]
 
+    private var trendMaximum: Double {
+        let maximum = days.reduce(0) { current, day in
+            max(current, max(day.inputTokens, day.outputTokens))
+        }
+        return Double(max(1, maximum)) * 1.12
+    }
+
+    private var trendAnimationKey: String {
+        days.map { "\($0.date.timeIntervalSince1970):\($0.inputTokens):\($0.outputTokens)" }.joined(separator: "|")
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 11) {
             Text("输入与输出趋势")
@@ -209,7 +220,6 @@ struct TokenTrendComparisonPanel: View {
             if days.isEmpty {
                 EmptyDataPanel(title: "暂无趋势数据", message: "同步日级 Token 数据后即可比较输入与输出。")
             } else {
-                let trendMaximum = max(1, (days.map { max($0.inputTokens, $0.outputTokens) }.max() ?? 1) * 112 / 100)
                 Chart {
                     ForEach(days) { day in
                         AreaMark(
@@ -267,8 +277,8 @@ struct TokenTrendComparisonPanel: View {
                 .chartPlotStyle { plot in plot.padding(.top, 12).padding(.trailing, 10) }
                 .chartLegend(position: .bottom, alignment: .leading, spacing: 14)
                 .frame(height: 226)
-                .animation(DSMotion.data, value: days.reduce(0) { $0 + $1.inputTokens + $1.outputTokens })
-                .dsChartReveal(key: days.map { "\($0.date.timeIntervalSince1970):\($0.inputTokens):\($0.outputTokens)" }.joined(separator: "|"))
+                .animation(DSMotion.data, value: trendAnimationKey)
+                .dsChartReveal(key: trendAnimationKey)
                 .transition(.opacity.combined(with: .scale(scale: 0.985)))
             }
         }
