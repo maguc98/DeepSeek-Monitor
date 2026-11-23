@@ -311,12 +311,14 @@ struct MetricCard: View {
             }
             Text(value)
                 .contentTransition(.numericText())
-                .font(.system(size: 23, weight: .bold, design: .rounded))
+                .font(.system(size: 23, weight: .bold, design: .rounded).monospacedDigit())
                 .foregroundStyle(DSTheme.ink)
+                .animation(DSMotion.data, value: value)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(14)
         .dsCard(17)
+        .dsEntrance(delay: 0.06)
     }
 }
 
@@ -687,8 +689,9 @@ struct OverviewView: View {
                     }
                     Text(formatMoney(data?.totalBalance, currency: data?.currency ?? "CNY"))
                         .contentTransition(.numericText())
-                        .font(.system(size: 32, weight: .bold, design: .rounded))
+                        .font(.system(size: 32, weight: .bold, design: .rounded).monospacedDigit())
                         .foregroundStyle(DSTheme.ink)
+                        .animation(DSMotion.data, value: data?.totalBalance)
                     HStack(spacing: 14) {
                         Text("充值余额  " + formatMoney(data?.normalBalance, currency: data?.currency ?? "CNY"))
                         Text("赠金余额  " + formatMoney(data?.bonusBalance, currency: data?.currency ?? "CNY"))
@@ -750,10 +753,11 @@ struct OverviewView: View {
                             message: "控制台用量接口尚未返回可绘制的日统计数据。"
                         )
                     } else {
+                        let maxSpend = recent.map { max(0, NSDecimalNumber(decimal: $0.cost).doubleValue) }.max() ?? 0
                         Chart(recent) { point in
                             AreaMark(
                                 x: .value("日期", point.date),
-                                y: .value("费用", NSDecimalNumber(decimal: point.cost).doubleValue)
+                                y: .value("费用", max(0, NSDecimalNumber(decimal: point.cost).doubleValue))
                             )
                             .foregroundStyle(
                                 LinearGradient(
@@ -764,14 +768,14 @@ struct OverviewView: View {
                             )
                             LineMark(
                                 x: .value("日期", point.date),
-                                y: .value("费用", NSDecimalNumber(decimal: point.cost).doubleValue)
+                                y: .value("费用", max(0, NSDecimalNumber(decimal: point.cost).doubleValue))
                             )
                             .foregroundStyle(DSTheme.purple)
                             .lineStyle(StrokeStyle(lineWidth: 2.6, lineCap: .round, lineJoin: .round))
-                            .interpolationMethod(.monotone)
+                            .interpolationMethod(.linear)
                             PointMark(
                                 x: .value("日期", point.date),
-                                y: .value("费用", NSDecimalNumber(decimal: point.cost).doubleValue)
+                                y: .value("费用", max(0, NSDecimalNumber(decimal: point.cost).doubleValue))
                             )
                             .foregroundStyle(.white)
                             .symbolSize(34)
@@ -779,7 +783,7 @@ struct OverviewView: View {
                                 Circle().fill(DSTheme.purple).frame(width: 5, height: 5)
                             }
                         }
-                        .chartYScale(domain: .automatic(includesZero: true))
+                        .chartYScale(domain: 0...max(1, maxSpend * 1.15))
                         .chartYAxis {
                             AxisMarks(position: .leading, values: .automatic(desiredCount: 4)) { _ in
                                 AxisGridLine().foregroundStyle(DSTheme.line.opacity(0.8))
@@ -789,14 +793,17 @@ struct OverviewView: View {
                         .chartXAxis {
                             AxisMarks(values: .automatic(desiredCount: 4)) { _ in
                                 AxisGridLine().foregroundStyle(.clear)
-                                AxisValueLabel().foregroundStyle(DSTheme.secondary)
+                                AxisValueLabel()
+                                    .foregroundStyle(DSTheme.secondary)
+                                    .offset(y: 6)
                             }
                         }
                         .chartPlotStyle { plot in
-                            plot.padding(.top, 8).padding(.trailing, 8)
+                            plot.padding(.top, 12).padding(.trailing, 10)
                         }
-                        .frame(height: 190)
+                        .frame(height: 202)
                         .animation(DSMotion.data, value: recent.last?.date)
+                        .dsChartReveal(key: "\(recent.count)-\(recent.last?.date.timeIntervalSince1970 ?? 0)-\(maxSpend)")
                     }
                 }
                 .padding(15)
@@ -880,6 +887,21 @@ struct AnalyticsView: View {
         }
     }
     private var visibleHours: [PlatformHourlyUsage] { data?.hourlyUsage ?? [] }
+
+    private var chartMaximumValue: Double {
+        let values = selectedRange == .day
+            ? visibleHours.map { chartValue($0) }
+            : visibleDays.map { chartValue($0) }
+        return max(1, (values.map { max(0, $0) }.max() ?? 0) * 1.12)
+    }
+
+    private var chartAnimationKey: String {
+        let lastDate = selectedRange == .day ? visibleHours.last?.date : visibleDays.last?.date
+        let total = selectedRange == .day
+            ? visibleHours.reduce(0.0) { $0 + chartValue($1) }
+            : visibleDays.reduce(0.0) { $0 + chartValue($1) }
+        return "\(selectedRange.rawValue)|\(selectedMetric.rawValue)|\(lastDate?.timeIntervalSince1970 ?? 0)|\(total)"
+    }
     private var selectedPoint: PlatformDailyUsage? {
         guard selectedRange != .day, let selectedDate else { return nil }
         return visibleDays.min {
@@ -1056,11 +1078,20 @@ struct AnalyticsView: View {
                             .foregroundStyle(DSTheme.purple)
                             .lineStyle(StrokeStyle(lineWidth: 2.7, lineCap: .round, lineJoin: .round))
                             .interpolationMethod(.linear)
+                            PointMark(
+                                x: .value("小时", point.date),
+                                y: .value("数值", chartValue(point))
+                            )
+                            .foregroundStyle(.white)
+                            .symbolSize(24)
+                            .annotation(position: .overlay) {
+                                Circle().fill(DSTheme.purple).frame(width: 4.5, height: 4.5)
+                            }
                             if let selectedHour {
                                 RuleMark(x: .value("选中时间", selectedHour.date))
                                     .foregroundStyle(DSTheme.blue.opacity(0.78))
                                     .lineStyle(StrokeStyle(lineWidth: 1.2, dash: [4, 3]))
-                                    .annotation(position: .top, spacing: 7) {
+                                    .annotation(position: .top, spacing: 7, overflowResolution: .init(x: .fit(to: .chart), y: .fit(to: .chart))) {
                                         VStack(alignment: .leading, spacing: 3) {
                                             Text(selectedHour.date.formatted(date: .omitted, time: .shortened))
                                                 .font(.system(size: 10, weight: .semibold))
@@ -1077,7 +1108,7 @@ struct AnalyticsView: View {
                             }
                         }
                         .chartXSelection(value: $selectedDate)
-                        .chartYScale(domain: .automatic(includesZero: true))
+                        .chartYScale(domain: 0...chartMaximumValue)
                         .chartYAxis {
                             AxisMarks(position: .leading, values: .automatic(desiredCount: 4)) { _ in
                                 AxisGridLine().foregroundStyle(DSTheme.line.opacity(0.8))
@@ -1092,9 +1123,10 @@ struct AnalyticsView: View {
                                     .offset(y: 6)
                             }
                         }
-                        .chartPlotStyle { plot in plot.padding(.top, 8).padding(.trailing, 8) }
+                        .chartPlotStyle { plot in plot.padding(.top, 14).padding(.trailing, 10) }
                         .frame(height: 226)
                         .animation(DSMotion.data, value: visibleHours.last?.date)
+                        .dsChartReveal(key: chartAnimationKey)
                         HStack {
                             Text(selectedHour.map { $0.date.formatted(date: .omitted, time: .shortened) } ?? "今天")
                             Spacer()
@@ -1119,11 +1151,20 @@ struct AnalyticsView: View {
                             .foregroundStyle(DSTheme.purple)
                             .lineStyle(StrokeStyle(lineWidth: 2.7, lineCap: .round, lineJoin: .round))
                             .interpolationMethod(.linear)
+                            PointMark(
+                                x: .value("日期", point.date),
+                                y: .value("数值", chartValue(point))
+                            )
+                            .foregroundStyle(.white)
+                            .symbolSize(24)
+                            .annotation(position: .overlay) {
+                                Circle().fill(DSTheme.purple).frame(width: 4.5, height: 4.5)
+                            }
                             if let selectedPoint {
                                 RuleMark(x: .value("选中日期", selectedPoint.date))
                                     .foregroundStyle(DSTheme.blue.opacity(0.78))
                                     .lineStyle(StrokeStyle(lineWidth: 1.2, dash: [4, 3]))
-                                    .annotation(position: .top, spacing: 7) {
+                                    .annotation(position: .top, spacing: 7, overflowResolution: .init(x: .fit(to: .chart), y: .fit(to: .chart))) {
                                         VStack(alignment: .leading, spacing: 3) {
                                             Text(selectedPoint.date.formatted(date: .abbreviated, time: .omitted))
                                                 .font(.system(size: 10, weight: .semibold))
@@ -1140,7 +1181,7 @@ struct AnalyticsView: View {
                             }
                         }
                         .chartXSelection(value: $selectedDate)
-                        .chartYScale(domain: .automatic(includesZero: true))
+                        .chartYScale(domain: 0...chartMaximumValue)
                         .chartYAxis {
                             AxisMarks(position: .leading, values: .automatic(desiredCount: 4)) { _ in
                                 AxisGridLine().foregroundStyle(DSTheme.line.opacity(0.8))
@@ -1155,9 +1196,10 @@ struct AnalyticsView: View {
                                     .offset(y: 6)
                             }
                         }
-                        .chartPlotStyle { plot in plot.padding(.top, 8).padding(.trailing, 8) }
+                        .chartPlotStyle { plot in plot.padding(.top, 14).padding(.trailing, 10) }
                         .frame(height: 226)
                         .animation(DSMotion.data, value: visibleDays.last?.date)
+                        .dsChartReveal(key: chartAnimationKey)
                         HStack {
                             Text(selectedPoint?.date.formatted(date: .abbreviated, time: .omitted) ?? "最近 \(selectedRange.rawValue)")
                             Spacer()
@@ -1250,19 +1292,19 @@ struct AnalyticsView: View {
 
     private func chartValue(_ point: PlatformDailyUsage) -> Double {
         switch selectedMetric {
-        case .spend: return NSDecimalNumber(decimal: point.cost).doubleValue
-        case .inputTokens: return Double(point.inputTokens)
-        case .outputTokens: return Double(point.outputTokens)
-        case .requests: return Double(point.requests)
+        case .spend: return max(0, NSDecimalNumber(decimal: point.cost).doubleValue)
+        case .inputTokens: return Double(max(0, point.inputTokens))
+        case .outputTokens: return Double(max(0, point.outputTokens))
+        case .requests: return Double(max(0, point.requests))
         }
     }
 
     private func chartValue(_ point: PlatformHourlyUsage) -> Double {
         switch selectedMetric {
-        case .spend: return NSDecimalNumber(decimal: point.cost).doubleValue
-        case .inputTokens: return Double(point.inputTokens)
-        case .outputTokens: return Double(point.outputTokens)
-        case .requests: return Double(point.requests)
+        case .spend: return max(0, NSDecimalNumber(decimal: point.cost).doubleValue)
+        case .inputTokens: return Double(max(0, point.inputTokens))
+        case .outputTokens: return Double(max(0, point.outputTokens))
+        case .requests: return Double(max(0, point.requests))
         }
     }
 
@@ -1272,9 +1314,10 @@ struct AnalyticsView: View {
             Text(title).font(.system(size: 13)).foregroundStyle(DSTheme.ink)
             Spacer()
             Text(value)
-                .font(.system(size: 13, weight: .semibold, design: .rounded))
+                .font(.system(size: 13, weight: .semibold, design: .rounded).monospacedDigit())
                 .contentTransition(.numericText())
                 .foregroundStyle(DSTheme.secondary)
+                .animation(DSMotion.data, value: value)
         }
     }
 }
@@ -1377,14 +1420,17 @@ struct ModelsView: View {
                             }
                             .frame(height: 205)
                             .chartLegend(position: .bottom, alignment: .leading)
+                            .dsSweepReveal(key: "\(selectedRange)-\(totalModelCost)")
                             HStack {
                                 Text("合计")
                                     .font(.system(size: 12, weight: .medium))
                                     .foregroundStyle(DSTheme.secondary)
                                 Spacer()
                                 Text(formatMoney(totalModelCost, currency: data?.currency ?? "CNY"))
-                                    .font(.system(size: 21, weight: .bold, design: .rounded))
+                                    .contentTransition(.numericText())
+                                    .font(.system(size: 21, weight: .bold, design: .rounded).monospacedDigit())
                                     .foregroundStyle(DSTheme.ink)
+                                    .animation(DSMotion.data, value: totalModelCost)
                             }
                         } else {
                             EmptyDataPanel(
