@@ -803,7 +803,7 @@ struct OverviewView: View {
                         }
                         .frame(height: 202)
                         .animation(DSMotion.data, value: recent.last?.date)
-                        .dsChartReveal(key: "\(recent.count)-\(recent.last?.date.timeIntervalSince1970 ?? 0)-\(maxSpend)")
+                        .dsChartReveal(key: recent.map { "\($0.date.timeIntervalSince1970):\($0.cost)" }.joined(separator: "|"))
                     }
                 }
                 .padding(15)
@@ -897,10 +897,10 @@ struct AnalyticsView: View {
 
     private var chartAnimationKey: String {
         let lastDate = selectedRange == .day ? visibleHours.last?.date : visibleDays.last?.date
-        let total = selectedRange == .day
-            ? visibleHours.reduce(0.0) { $0 + chartValue($1) }
-            : visibleDays.reduce(0.0) { $0 + chartValue($1) }
-        return "\(selectedRange.rawValue)|\(selectedMetric.rawValue)|\(lastDate?.timeIntervalSince1970 ?? 0)|\(total)"
+        let signature = selectedRange == .day
+            ? visibleHours.map { "\($0.date.timeIntervalSince1970):\(chartValue($0))" }.joined(separator: "|")
+            : visibleDays.map { "\($0.date.timeIntervalSince1970):\(chartValue($0))" }.joined(separator: "|")
+        return "\(selectedRange.rawValue)|\(selectedMetric.rawValue)|\(lastDate?.timeIntervalSince1970 ?? 0)|\(signature)"
     }
     private var selectedPoint: PlatformDailyUsage? {
         guard selectedRange != .day, let selectedDate else { return nil }
@@ -1420,7 +1420,7 @@ struct ModelsView: View {
                             }
                             .frame(height: 205)
                             .chartLegend(position: .bottom, alignment: .leading)
-                            .dsSweepReveal(key: "\(selectedRange)-\(totalModelCost)")
+                            .dsSweepReveal(key: "\(selectedRange)|\(modelRows.filter { $0.cost > 0 }.map { "\($0.model):\($0.cost)" }.joined(separator: "|"))")
                             HStack {
                                 Text("合计")
                                     .font(.system(size: 12, weight: .medium))
