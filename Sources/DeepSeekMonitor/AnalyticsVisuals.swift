@@ -13,6 +13,24 @@ struct TokenCompositionPanel: View {
     let cacheMissTokens: Int
     let outputTokens: Int
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var totalProgress: Double = 0
+
+    private var animatedTotal: Int {
+        Int((Double(total) * totalProgress).rounded())
+    }
+
+    private func replayTotal() {
+        guard !reduceMotion else {
+            totalProgress = 1
+            return
+        }
+        totalProgress = 0
+        withAnimation(.easeOut(duration: 0.92)) {
+            totalProgress = 1
+        }
+    }
+
     private var slices: [TokenSlice] {
         let plainInput = max(0, inputTokens - cacheHitTokens - cacheMissTokens)
         return [
@@ -55,11 +73,13 @@ struct TokenCompositionPanel: View {
                 .frame(height: 200)
                 .chartLegend(position: .bottom, alignment: .leading, spacing: 12)
                 .animation(DSMotion.data, value: total)
+                .dsSweepReveal(key: String(total))
                 .transition(.opacity.combined(with: .scale(scale: 0.985)))
                 .overlay {
                     GeometryReader { geometry in
                         VStack(spacing: 4) {
-                            Text(total.formatted())
+                            Text(animatedTotal.formatted())
+                                .contentTransition(.numericText())
                                 .font(.system(size: 17, weight: .bold, design: .rounded).monospacedDigit())
                                 .tracking(-0.45)
                                 .lineLimit(1)
@@ -97,10 +117,16 @@ struct TokenCompositionPanel: View {
                 }
                 .padding(12)
                 .background(DSTheme.canvas, in: RoundedRectangle(cornerRadius: 13))
+                .dsEntrance(delay: 0.24)
             }
         }
         .padding(15)
         .dsCard()
+        .onAppear(perform: replayTotal)
+        .onChange(of: total) { _, _ in replayTotal() }
+        .onChange(of: reduceMotion) { _, shouldReduce in
+            if shouldReduce { totalProgress = 1 }
+        }
     }
 }
 
@@ -202,7 +228,7 @@ struct TokenTrendComparisonPanel: View {
                         )
                         .foregroundStyle(DSTheme.blue)
                         .lineStyle(StrokeStyle(lineWidth: 2.4, lineCap: .round, lineJoin: .round))
-                        .interpolationMethod(.monotone)
+                        .interpolationMethod(.linear)
 
                         AreaMark(
                             x: .value("日期", day.date),
@@ -220,7 +246,7 @@ struct TokenTrendComparisonPanel: View {
                         )
                         .foregroundStyle(DSTheme.purple)
                         .lineStyle(StrokeStyle(lineWidth: 2.4, lineCap: .round, lineJoin: .round))
-                        .interpolationMethod(.monotone)
+                        .interpolationMethod(.linear)
                     }
                 }
                 .chartYAxis {
@@ -232,13 +258,17 @@ struct TokenTrendComparisonPanel: View {
                 .chartXAxis {
                     AxisMarks(values: .automatic(desiredCount: 5)) { _ in
                         AxisGridLine().foregroundStyle(.clear)
-                        AxisValueLabel().foregroundStyle(DSTheme.secondary)
+                        AxisValueLabel()
+                            .foregroundStyle(DSTheme.secondary)
+                            .offset(y: 6)
                     }
                 }
-                .chartPlotStyle { plot in plot.padding(.top, 8).padding(.trailing, 8) }
+                .chartYScale(domain: 0...max(1, Double(days.map { max($0.inputTokens, $0.outputTokens) }.max() ?? 1) * 1.12))
+                .chartPlotStyle { plot in plot.padding(.top, 12).padding(.trailing, 10) }
                 .chartLegend(position: .bottom, alignment: .leading, spacing: 14)
-                .frame(height: 210)
+                .frame(height: 226)
                 .animation(DSMotion.data, value: days.reduce(0) { $0 + $1.inputTokens + $1.outputTokens })
+                .dsChartReveal(key: "\(days.count)-\(days.last?.date.timeIntervalSince1970 ?? 0)-\(days.reduce(0) { $0 + $1.inputTokens + $1.outputTokens })")
                 .transition(.opacity.combined(with: .scale(scale: 0.985)))
             }
         }
@@ -270,6 +300,7 @@ struct ModelRequestDistributionPanel: View {
                 .frame(height: 190)
                 .chartLegend(position: .bottom, alignment: .leading)
                 .animation(DSMotion.data, value: items.reduce(0) { $0 + $1.requests })
+                .dsSweepReveal(key: String(items.reduce(0) { $0 + $1.requests }))
                 .transition(.opacity.combined(with: .scale(scale: 0.985)))
                 HStack {
                     Text("总请求数")
@@ -277,7 +308,8 @@ struct ModelRequestDistributionPanel: View {
                         .foregroundStyle(DSTheme.secondary)
                     Spacer()
                     Text(items.reduce(0) { $0 + $1.requests }.formatted())
-                        .font(.system(size: 18, weight: .bold, design: .rounded))
+                        .contentTransition(.numericText())
+                        .font(.system(size: 18, weight: .bold, design: .rounded).monospacedDigit())
                         .foregroundStyle(DSTheme.ink)
                 }
             }
@@ -318,8 +350,10 @@ struct ModelTokenComparisonPanel: View {
                     }
                 }
                 .chartLegend(position: .bottom, alignment: .leading)
+                .chartXScale(domain: 0...max(1, models.map { max($0.inputTokens, $0.outputTokens) }.max() ?? 1))
                 .frame(height: CGFloat(max(150, models.count * 48)))
                 .animation(DSMotion.data, value: models.reduce(0) { $0 + $1.inputTokens + $1.outputTokens })
+                .dsChartReveal(key: "\(models.count)-\(models.reduce(0) { $0 + $1.inputTokens + $1.outputTokens })")
                 .transition(.opacity.combined(with: .scale(scale: 0.985)))
             }
         }
