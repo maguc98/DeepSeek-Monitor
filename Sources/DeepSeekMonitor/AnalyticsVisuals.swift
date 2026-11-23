@@ -210,7 +210,6 @@ struct TokenTrendComparisonPanel: View {
                 EmptyDataPanel(title: "暂无趋势数据", message: "同步日级 Token 数据后即可比较输入与输出。")
             } else {
                 let trendMaximum = max(1, (days.map { max($0.inputTokens, $0.outputTokens) }.max() ?? 1) * 112 / 100)
-                let trendAxisDates = DSChartAxis.sampledDates(days.map(\.date), count: 4)
                 Chart {
                     ForEach(days) { day in
                         AreaMark(
@@ -257,15 +256,11 @@ struct TokenTrendComparisonPanel: View {
                     }
                 }
                 .chartXAxis {
-                    AxisMarks(values: trendAxisDates) { value in
+                    AxisMarks(values: .automatic(desiredCount: 4)) { _ in
                         AxisGridLine().foregroundStyle(.clear)
-                        if let date = value.as(Date.self) {
-                            AxisValueLabel {
-                                Text(date.formatted(.dateTime.month(.abbreviated).day()))
-                            }
+                        AxisValueLabel()
                             .foregroundStyle(DSTheme.secondary)
                             .offset(y: 4)
-                        }
                     }
                 }
                 .chartYScale(domain: (-max(0.15, trendMaximum * 0.14))...trendMaximum)
