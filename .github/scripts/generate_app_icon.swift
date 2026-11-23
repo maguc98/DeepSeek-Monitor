@@ -113,16 +113,17 @@ guard let png = cg.representation(using: .png, properties: [:]) else {
 try png.write(to: outputURL)
 
 // Validate the exported PNG itself, not just the existence of the file.
-guard let verification = NSBitmapImageRep(contentsOf: outputURL) else {
+guard let savedData = try? Data(contentsOf: outputURL),
+      let verification = NSBitmapImageRep(data: savedData) else {
     fatalError("Generated app icon cannot be reopened")
 }
 var coloredSamples = 0
 for y in stride(from: 0, to: size, by: 4) {
     for x in stride(from: 0, to: size, by: 4) {
-        guard let color = verification.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB) else { continue }
+        guard let color = verification.colorAt(x: x, y: y)?.usingColorSpace(NSColorSpace.deviceRGB) else { continue }
         let maximum = max(color.redComponent, color.greenComponent, color.blueComponent)
         let minimum = min(color.redComponent, color.greenComponent, color.blueComponent)
-        if maximum - minimum > 0.12 { coloredSamples += 1 }
+        if maximum - minimum > CGFloat(0.12) { coloredSamples += 1 }
     }
 }
 guard coloredSamples > 100 else {
