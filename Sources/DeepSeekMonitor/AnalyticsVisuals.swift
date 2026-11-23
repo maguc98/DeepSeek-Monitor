@@ -86,7 +86,6 @@ struct TokenCompositionPanel: View {
                                 .minimumScaleFactor(0.62)
                                 .frame(maxWidth: geometry.size.width * 0.48)
                                 .foregroundStyle(DSTheme.ink)
-                                .contentTransition(.numericText())
                             Text("总 Token")
                                 .font(.system(size: 10, weight: .medium))
                                 .foregroundStyle(DSTheme.secondary)
@@ -263,7 +262,7 @@ struct TokenTrendComparisonPanel: View {
                             .offset(y: 6)
                     }
                 }
-                .chartYScale(domain: 0...max(1, Double(days.map { max($0.inputTokens, $0.outputTokens) }.max() ?? 1) * 1.12))
+                .chartYScale(domain: 0...max(1, (days.map { max($0.inputTokens, $0.outputTokens) }.max() ?? 1) * 112 / 100))
                 .chartPlotStyle { plot in plot.padding(.top, 12).padding(.trailing, 10) }
                 .chartLegend(position: .bottom, alignment: .leading, spacing: 14)
                 .frame(height: 226)
