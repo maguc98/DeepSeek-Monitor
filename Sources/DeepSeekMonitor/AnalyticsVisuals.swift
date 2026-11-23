@@ -72,7 +72,7 @@ struct TokenCompositionPanel: View {
                 }
                 .frame(height: 200)
                 .chartLegend(position: .bottom, alignment: .leading, spacing: 12)
-                .animation(DSMotion.data, value: total)
+                .transaction { transaction in transaction.animation = nil }
                 .dsSweepReveal(key: "\(total)|\(slices.map { "\($0.name):\($0.value)" }.joined(separator: "|"))")
                 .transition(.opacity.combined(with: .scale(scale: 0.985)))
                 .overlay {
@@ -309,7 +309,7 @@ struct ModelRequestDistributionPanel: View {
                 }
                 .frame(height: 190)
                 .chartLegend(position: .bottom, alignment: .leading)
-                .animation(DSMotion.data, value: items.reduce(0) { $0 + $1.requests })
+                .transaction { transaction in transaction.animation = nil }
                 .dsSweepReveal(key: items.map { "\($0.model):\($0.requests)" }.joined(separator: "|"))
                 .transition(.opacity.combined(with: .scale(scale: 0.985)))
                 HStack {
