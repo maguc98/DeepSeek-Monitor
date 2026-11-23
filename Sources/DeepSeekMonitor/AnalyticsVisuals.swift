@@ -47,25 +47,33 @@ struct TokenCompositionPanel: View {
                 Chart(slices) { slice in
                     SectorMark(
                         angle: .value("Token", slice.value),
-                        innerRadius: .ratio(0.62),
+                        innerRadius: .ratio(0.68),
                         angularInset: 2
                     )
                     .foregroundStyle(by: .value("类型", slice.name))
                 }
-                .frame(height: 190)
+                .frame(height: 200)
                 .chartLegend(position: .bottom, alignment: .leading, spacing: 12)
                 .animation(DSMotion.data, value: total)
                 .transition(.opacity.combined(with: .scale(scale: 0.985)))
                 .overlay {
-                    VStack(spacing: 3) {
-                        Text(total.formatted())
-                            .font(.system(size: 19, weight: .bold, design: .rounded))
-                            .foregroundStyle(DSTheme.ink)
-                        Text("总 Token")
-                            .font(.system(size: 10))
-                            .foregroundStyle(DSTheme.secondary)
+                    GeometryReader { geometry in
+                        VStack(spacing: 4) {
+                            Text(total.formatted())
+                                .font(.system(size: 17, weight: .bold, design: .rounded).monospacedDigit())
+                                .tracking(-0.45)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.62)
+                                .frame(maxWidth: geometry.size.width * 0.48)
+                                .foregroundStyle(DSTheme.ink)
+                                .contentTransition(.numericText())
+                            Text("总 Token")
+                                .font(.system(size: 10, weight: .medium))
+                                .foregroundStyle(DSTheme.secondary)
+                        }
+                        .frame(width: geometry.size.width, height: geometry.size.height)
+                        .allowsHitTesting(false)
                     }
-                    .allowsHitTesting(false)
                 }
 
                 HStack(spacing: 12) {
