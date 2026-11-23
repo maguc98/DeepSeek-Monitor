@@ -129,12 +129,13 @@ struct DSRingSweepShape: Shape {
 struct DSSweepRevealModifier: ViewModifier {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var progress: CGFloat = 0
+    @State private var finishOpacity: Double = 0.72
     let key: String
 
     func body(content: Content) -> some View {
         content
             .scaleEffect(0.94 + 0.06 * progress)
-            .opacity(Double(progress))
+            .opacity(Double(progress) * finishOpacity)
             .mask {
                 GeometryReader { geometry in
                     DSRingSweepShape(progress: progress)
@@ -144,18 +145,27 @@ struct DSSweepRevealModifier: ViewModifier {
             .onAppear(perform: replay)
             .onChange(of: key) { _, _ in replay() }
             .onChange(of: reduceMotion) { _, shouldReduce in
-                if shouldReduce { progress = 1 }
+                if shouldReduce {
+                    progress = 1
+                    finishOpacity = 1
+                }
             }
     }
 
     private func replay() {
         guard !reduceMotion else {
             progress = 1
+            finishOpacity = 1
             return
         }
+
         progress = 0
+        finishOpacity = 0.72
         withAnimation(.easeInOut(duration: 0.92)) {
             progress = 1
+        }
+        withAnimation(.easeOut(duration: 0.38).delay(0.72)) {
+            finishOpacity = 1
         }
     }
 }
