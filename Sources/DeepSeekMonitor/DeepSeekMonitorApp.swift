@@ -1442,6 +1442,7 @@ struct ModelsView: View {
                             }
                             .frame(height: 205)
                             .chartLegend(position: .bottom, alignment: .leading)
+                            .transaction { transaction in transaction.animation = nil }
                             .dsSweepReveal(key: "\(selectedRange)|\(modelRows.filter { $0.cost > 0 }.map { "\($0.model):\($0.cost)" }.joined(separator: "|"))")
                             HStack {
                                 Text("合计")
