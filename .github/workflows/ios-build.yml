@@ -49,6 +49,8 @@ jobs:
           set -euo pipefail
           APP_PATH="build/DeviceDerivedData/Build/Products/Release-iphoneos/DeepSeek Monitor.app"
           test -d "$APP_PATH"
+          test -s "$APP_PATH/AppIcon60x60@2x.png"
+          test -s "$APP_PATH/Assets.car"
           /usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$APP_PATH/Info.plist"
           /usr/libexec/PlistBuddy -c "Print :MinimumOSVersion" "$APP_PATH/Info.plist"
           rm -rf build/ipa-package
