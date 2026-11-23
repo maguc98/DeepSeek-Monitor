@@ -134,7 +134,7 @@ struct DSSweepRevealModifier: ViewModifier {
     func body(content: Content) -> some View {
         content
             .scaleEffect(0.94 + 0.06 * progress)
-            .opacity(progress)
+            .opacity(Double(progress))
             .mask {
                 GeometryReader { geometry in
                     DSRingSweepShape(progress: progress)
