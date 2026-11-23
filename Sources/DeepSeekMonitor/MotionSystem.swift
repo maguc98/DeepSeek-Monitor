@@ -7,6 +7,17 @@ enum DSMotion {
     static let entrance = Animation.spring(response: 0.52, dampingFraction: 0.88)
 }
 
+enum DSChartAxis {
+    static func sampledDates(_ dates: [Date], count: Int = 4) -> [Date] {
+        guard dates.count > 1, count > 1 else { return dates }
+        let sampleCount = min(count, dates.count)
+        return (0..<sampleCount).map { index in
+            let position = Double(index) * Double(dates.count - 1) / Double(sampleCount - 1)
+            return dates[Int(position.rounded())]
+        }
+    }
+}
+
 struct DSGlobalButtonStyle: ButtonStyle {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -91,6 +102,11 @@ struct DSChartRevealModifier: ViewModifier {
 struct DSRingSweepShape: Shape {
     var progress: CGFloat
 
+    var animatableData: CGFloat {
+        get { progress }
+        set { progress = newValue }
+    }
+
     func path(in rect: CGRect) -> Path {
         let center = CGPoint(x: rect.midX, y: rect.midY)
         let radius = sqrt(rect.width * rect.width + rect.height * rect.height) / 2
@@ -117,6 +133,8 @@ struct DSSweepRevealModifier: ViewModifier {
 
     func body(content: Content) -> some View {
         content
+            .scaleEffect(0.94 + 0.06 * progress)
+            .opacity(progress)
             .mask {
                 GeometryReader { geometry in
                     DSRingSweepShape(progress: progress)
