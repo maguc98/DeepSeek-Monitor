@@ -55,7 +55,7 @@ extension View {
 
 /// Reveals a chart from left to right while keeping the chart's own layout intact.
 struct DSChartRevealModifier: ViewModifier {
-    @Environment(\\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var progress: CGFloat = 0
     let key: String
 
@@ -111,7 +111,7 @@ struct DSRingSweepShape: Shape {
 }
 
 struct DSSweepRevealModifier: ViewModifier {
-    @Environment(\\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var progress: CGFloat = 0
     let key: String
 
