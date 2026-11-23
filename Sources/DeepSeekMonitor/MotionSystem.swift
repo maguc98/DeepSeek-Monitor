@@ -103,7 +103,7 @@ struct DSRingSweepShape: Shape {
             radius: radius,
             startAngle: .degrees(-90),
             endAngle: .degrees(-90 + 360 * Double(amount)),
-            clockwise: false
+            clockwise: true
         )
         path.closeSubpath()
         return path
