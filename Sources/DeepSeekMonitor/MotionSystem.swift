@@ -93,7 +93,7 @@ struct DSRingSweepShape: Shape {
 
     func path(in rect: CGRect) -> Path {
         let center = CGPoint(x: rect.midX, y: rect.midY)
-        let radius = min(rect.width, rect.height) / 2
+        let radius = sqrt(rect.width * rect.width + rect.height * rect.height) / 2
         let amount = min(max(progress, 0), 1)
         var path = Path()
         path.move(to: center)
