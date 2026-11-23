@@ -754,6 +754,7 @@ struct OverviewView: View {
                         )
                     } else {
                         let maxSpend = recent.map { max(0, NSDecimalNumber(decimal: $0.cost).doubleValue) }.max() ?? 0
+                        let recentAxisDates = DSChartAxis.sampledDates(recent.map(\.date), count: 4)
                         Chart(recent) { point in
                             AreaMark(
                                 x: .value("日期", point.date),
@@ -783,7 +784,7 @@ struct OverviewView: View {
                                 Circle().fill(DSTheme.purple).frame(width: 5, height: 5)
                             }
                         }
-                        .chartYScale(domain: 0...max(1, maxSpend * 1.15))
+                        .chartYScale(domain: (-max(0.15, maxSpend * 0.14))...max(1, maxSpend * 1.15))
                         .chartYAxis {
                             AxisMarks(position: .leading, values: .automatic(desiredCount: 4)) { _ in
                                 AxisGridLine().foregroundStyle(DSTheme.line.opacity(0.8))
@@ -791,11 +792,15 @@ struct OverviewView: View {
                             }
                         }
                         .chartXAxis {
-                            AxisMarks(values: .automatic(desiredCount: 4)) { _ in
+                            AxisMarks(values: recentAxisDates) { value in
                                 AxisGridLine().foregroundStyle(.clear)
-                                AxisValueLabel()
+                                if let date = value.as(Date.self) {
+                                    AxisValueLabel {
+                                        Text(date.formatted(.dateTime.month(.abbreviated).day()))
+                                    }
                                     .foregroundStyle(DSTheme.secondary)
-                                    .offset(y: 6)
+                                    .offset(y: 4)
+                                }
                             }
                         }
                         .chartPlotStyle { plot in
@@ -902,6 +907,11 @@ struct AnalyticsView: View {
             : visibleDays.map { "\($0.date.timeIntervalSince1970):\(chartValue($0))" }.joined(separator: "|")
         return "\(selectedRange.rawValue)|\(selectedMetric.rawValue)|\(lastDate?.timeIntervalSince1970 ?? 0)|\(signature)"
     }
+    private var chartAxisDates: [Date] {
+        let dates = selectedRange == .day ? visibleHours.map(\.date) : visibleDays.map(\.date)
+        return DSChartAxis.sampledDates(dates, count: 4)
+    }
+
     private var selectedPoint: PlatformDailyUsage? {
         guard selectedRange != .day, let selectedDate else { return nil }
         return visibleDays.min {
@@ -1108,7 +1118,7 @@ struct AnalyticsView: View {
                             }
                         }
                         .chartXSelection(value: $selectedDate)
-                        .chartYScale(domain: 0...chartMaximumValue)
+                        .chartYScale(domain: (-max(0.15, chartMaximumValue * 0.14))...chartMaximumValue)
                         .chartYAxis {
                             AxisMarks(position: .leading, values: .automatic(desiredCount: 4)) { _ in
                                 AxisGridLine().foregroundStyle(DSTheme.line.opacity(0.8))
@@ -1116,11 +1126,17 @@ struct AnalyticsView: View {
                             }
                         }
                         .chartXAxis {
-                            AxisMarks(values: .automatic(desiredCount: 4)) { _ in
+                            AxisMarks(values: chartAxisDates) { value in
                                 AxisGridLine().foregroundStyle(.clear)
-                                AxisValueLabel()
+                                if let date = value.as(Date.self) {
+                                    AxisValueLabel {
+                                        Text(selectedRange == .day
+                                             ? date.formatted(date: .omitted, time: .shortened)
+                                             : date.formatted(.dateTime.month(.abbreviated).day()))
+                                    }
                                     .foregroundStyle(DSTheme.secondary)
-                                    .offset(y: 6)
+                                    .offset(y: 4)
+                                }
                             }
                         }
                         .chartPlotStyle { plot in plot.padding(.top, 14).padding(.trailing, 10) }
@@ -1181,7 +1197,7 @@ struct AnalyticsView: View {
                             }
                         }
                         .chartXSelection(value: $selectedDate)
-                        .chartYScale(domain: 0...chartMaximumValue)
+                        .chartYScale(domain: (-max(0.15, chartMaximumValue * 0.14))...chartMaximumValue)
                         .chartYAxis {
                             AxisMarks(position: .leading, values: .automatic(desiredCount: 4)) { _ in
                                 AxisGridLine().foregroundStyle(DSTheme.line.opacity(0.8))
@@ -1189,11 +1205,17 @@ struct AnalyticsView: View {
                             }
                         }
                         .chartXAxis {
-                            AxisMarks(values: .automatic(desiredCount: 5)) { _ in
+                            AxisMarks(values: chartAxisDates) { value in
                                 AxisGridLine().foregroundStyle(.clear)
-                                AxisValueLabel()
+                                if let date = value.as(Date.self) {
+                                    AxisValueLabel {
+                                        Text(selectedRange == .day
+                                             ? date.formatted(date: .omitted, time: .shortened)
+                                             : date.formatted(.dateTime.month(.abbreviated).day()))
+                                    }
                                     .foregroundStyle(DSTheme.secondary)
-                                    .offset(y: 6)
+                                    .offset(y: 4)
+                                }
                             }
                         }
                         .chartPlotStyle { plot in plot.padding(.top, 14).padding(.trailing, 10) }
