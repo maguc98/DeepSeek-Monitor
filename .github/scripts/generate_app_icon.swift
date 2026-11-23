@@ -4,7 +4,6 @@ import Foundation
 let size = 1024
 let image = NSImage(size: NSSize(width: size, height: size))
 image.lockFocus()
-defer { image.unlockFocus() }
 
 let rect = NSRect(x: 0, y: 0, width: size, height: size)
 NSColor.white.setFill()
@@ -87,17 +86,46 @@ wave.curve(to: NSPoint(x: 770, y: 585),
 NSColor.white.setStroke()
 wave.stroke()
 
+// Unlock the source image before copying it into the bitmap representation.
+// The previous deferred unlock kept it locked during rasterization and emitted
+// an almost-solid white PNG despite the drawing commands succeeding.
+image.unlockFocus()
+
 let cg = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: size, pixelsHigh: size,
                           bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true,
                           isPlanar: false, colorSpaceName: .deviceRGB,
                           bytesPerRow: 0, bitsPerPixel: 0)!
 NSGraphicsContext.saveGraphicsState()
-NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: cg)
+let bitmapContext = NSGraphicsContext(bitmapImageRep: cg)!
+bitmapContext.imageInterpolation = .high
+NSGraphicsContext.current = bitmapContext
 image.draw(in: rect)
+bitmapContext.flushGraphics()
 NSGraphicsContext.restoreGraphicsState()
-let png = cg.representation(using: .png, properties: [:])!
+
 let output = CommandLine.arguments.count > 1 ? CommandLine.arguments[1] : "Sources/DeepSeekMonitor/Assets.xcassets/AppIcon.appiconset/AppIcon.png"
-try FileManager.default.createDirectory(at: URL(fileURLWithPath: output).deletingLastPathComponent(),
+let outputURL = URL(fileURLWithPath: output)
+try FileManager.default.createDirectory(at: outputURL.deletingLastPathComponent(),
                                         withIntermediateDirectories: true)
-try png.write(to: URL(fileURLWithPath: output))
-print("Generated \(output)")
+guard let png = cg.representation(using: .png, properties: [:]) else {
+    fatalError("Failed to encode app icon PNG")
+}
+try png.write(to: outputURL)
+
+// Validate the exported PNG itself, not just the existence of the file.
+guard let verification = NSBitmapImageRep(contentsOf: outputURL) else {
+    fatalError("Generated app icon cannot be reopened")
+}
+var coloredSamples = 0
+for y in stride(from: 0, to: size, by: 4) {
+    for x in stride(from: 0, to: size, by: 4) {
+        guard let color = verification.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB) else { continue }
+        let maximum = max(color.redComponent, color.greenComponent, color.blueComponent)
+        let minimum = min(color.redComponent, color.greenComponent, color.blueComponent)
+        if maximum - minimum > 0.12 { coloredSamples += 1 }
+    }
+}
+guard coloredSamples > 100 else {
+    fatalError("Generated app icon is blank: only \(coloredSamples) colored samples found")
+}
+print("Generated \(output) with \(coloredSamples) colored samples")
