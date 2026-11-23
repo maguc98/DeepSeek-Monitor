@@ -1087,11 +1087,13 @@ struct AnalyticsView: View {
                         .chartXAxis {
                             AxisMarks(values: .automatic(desiredCount: 4)) { _ in
                                 AxisGridLine().foregroundStyle(.clear)
-                                AxisValueLabel().foregroundStyle(DSTheme.secondary)
+                                AxisValueLabel()
+                                    .foregroundStyle(DSTheme.secondary)
+                                    .offset(y: 6)
                             }
                         }
                         .chartPlotStyle { plot in plot.padding(.top, 8).padding(.trailing, 8) }
-                        .frame(height: 220)
+                        .frame(height: 226)
                         .animation(DSMotion.data, value: visibleHours.last?.date)
                         HStack {
                             Text(selectedHour.map { $0.date.formatted(date: .omitted, time: .shortened) } ?? "今天")
@@ -1148,11 +1150,13 @@ struct AnalyticsView: View {
                         .chartXAxis {
                             AxisMarks(values: .automatic(desiredCount: 5)) { _ in
                                 AxisGridLine().foregroundStyle(.clear)
-                                AxisValueLabel().foregroundStyle(DSTheme.secondary)
+                                AxisValueLabel()
+                                    .foregroundStyle(DSTheme.secondary)
+                                    .offset(y: 6)
                             }
                         }
                         .chartPlotStyle { plot in plot.padding(.top, 8).padding(.trailing, 8) }
-                        .frame(height: 220)
+                        .frame(height: 226)
                         .animation(DSMotion.data, value: visibleDays.last?.date)
                         HStack {
                             Text(selectedPoint?.date.formatted(date: .abbreviated, time: .omitted) ?? "最近 \(selectedRange.rawValue)")
