@@ -73,7 +73,7 @@ struct TokenCompositionPanel: View {
                 .frame(height: 200)
                 .chartLegend(position: .bottom, alignment: .leading, spacing: 12)
                 .animation(DSMotion.data, value: total)
-                .dsSweepReveal(key: String(total))
+                .dsSweepReveal(key: "\(total)|\(slices.map { "\($0.name):\($0.value)" }.joined(separator: "|"))")
                 .transition(.opacity.combined(with: .scale(scale: 0.985)))
                 .overlay {
                     GeometryReader { geometry in
@@ -267,7 +267,7 @@ struct TokenTrendComparisonPanel: View {
                 .chartLegend(position: .bottom, alignment: .leading, spacing: 14)
                 .frame(height: 226)
                 .animation(DSMotion.data, value: days.reduce(0) { $0 + $1.inputTokens + $1.outputTokens })
-                .dsChartReveal(key: "\(days.count)-\(days.last?.date.timeIntervalSince1970 ?? 0)-\(days.reduce(0) { $0 + $1.inputTokens + $1.outputTokens })")
+                .dsChartReveal(key: days.map { "\($0.date.timeIntervalSince1970):\($0.inputTokens):\($0.outputTokens)" }.joined(separator: "|"))
                 .transition(.opacity.combined(with: .scale(scale: 0.985)))
             }
         }
@@ -299,7 +299,7 @@ struct ModelRequestDistributionPanel: View {
                 .frame(height: 190)
                 .chartLegend(position: .bottom, alignment: .leading)
                 .animation(DSMotion.data, value: items.reduce(0) { $0 + $1.requests })
-                .dsSweepReveal(key: String(items.reduce(0) { $0 + $1.requests }))
+                .dsSweepReveal(key: items.map { "\($0.model):\($0.requests)" }.joined(separator: "|"))
                 .transition(.opacity.combined(with: .scale(scale: 0.985)))
                 HStack {
                     Text("总请求数")
@@ -310,6 +310,7 @@ struct ModelRequestDistributionPanel: View {
                         .contentTransition(.numericText())
                         .font(.system(size: 18, weight: .bold, design: .rounded).monospacedDigit())
                         .foregroundStyle(DSTheme.ink)
+                        .animation(DSMotion.data, value: items.reduce(0) { $0 + $1.requests })
                 }
             }
         }
@@ -352,7 +353,7 @@ struct ModelTokenComparisonPanel: View {
                 .chartXScale(domain: 0...max(1, models.map { max($0.inputTokens, $0.outputTokens) }.max() ?? 1))
                 .frame(height: CGFloat(max(150, models.count * 48)))
                 .animation(DSMotion.data, value: models.reduce(0) { $0 + $1.inputTokens + $1.outputTokens })
-                .dsChartReveal(key: "\(models.count)-\(models.reduce(0) { $0 + $1.inputTokens + $1.outputTokens })")
+                .dsChartReveal(key: models.map { "\($0.model):\($0.inputTokens):\($0.outputTokens)" }.joined(separator: "|"))
                 .transition(.opacity.combined(with: .scale(scale: 0.985)))
             }
         }
